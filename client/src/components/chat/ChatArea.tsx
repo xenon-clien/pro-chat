@@ -32,6 +32,7 @@ export const ChatArea: React.FC = () => {
   const [isNitroModalOpen, setIsNitroModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const activeServer = servers.find(s => s.id === activeServerId) || servers[0];
   const activeChannel = activeServer?.channels.find(c => c.id === activeChannelId) || activeServer?.channels[0];
@@ -43,6 +44,11 @@ export const ChatArea: React.FC = () => {
       fetchMessages(activeChannelId);
     }
   }, [activeChannelId, fetchMessages]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -170,13 +176,86 @@ export const ChatArea: React.FC = () => {
         )}
 
         {/* Message Area */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 flex flex-col-reverse space-y-reverse space-y-2">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 flex flex-col space-y-4">
+          {/* ──────── RENOVATED HERO WELCOME HUB (100% Fully Visible) ──────── */}
+          <div className="flex flex-col items-center justify-center text-center my-4 p-8 bg-gradient-to-b from-[#111522]/90 to-[#0E121B]/40 rounded-3xl border border-cyan-500/20 shadow-2xl relative overflow-hidden animate-fade-in shrink-0">
+            {/* Glowing Ambient Background Circles */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-32 bg-gradient-to-r from-pink-500/20 via-purple-500/20 to-cyan-500/20 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Hero Icon Emblem */}
+            <div className="relative mb-4">
+              <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-blue-600 via-cyan-500 to-pink-500 p-0.5 shadow-2xl shadow-cyan-500/20 flex items-center justify-center animate-character-float">
+                <div className="w-full h-full bg-[#0E121B] rounded-[22px] flex items-center justify-center">
+                  <Hash size={40} className="text-cyan-400 stroke-[2.5]" />
+                </div>
+              </div>
+              <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-pink-500 flex items-center justify-center text-white text-xs shadow-md">
+                ✨
+              </div>
+            </div>
+
+            {/* Main Heading & Subtitle */}
+            <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight mb-2">
+              Welcome to <span className="bg-gradient-to-r from-cyan-400 via-pink-400 to-yellow-300 bg-clip-text text-transparent">#{activeChannel.name}!</span> 👋
+            </h1>
+            <p className="text-gray-400 text-xs md:text-sm max-w-md mx-auto leading-relaxed">
+              This is the very start of the <strong className="text-cyan-300">#{activeChannel.name}</strong> channel. 
+              Send a wave, hop into voice, or invite your friends to start chatting!
+            </p>
+
+            {/* Quick Starter Action Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 w-full max-w-2xl">
+              {/* Action 1: Send Wave */}
+              <button
+                onClick={handleSendWave}
+                className="p-3 rounded-2xl bg-[#141926] hover:bg-cyan-400 hover:text-black text-gray-200 border border-white/10 hover:border-cyan-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
+              >
+                <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">👋</span>
+                <span className="text-xs font-black">Send a Wave</span>
+                <span className="text-[10px] text-gray-400 group-hover:text-black/80">Say hello!</span>
+              </button>
+
+              {/* Action 2: Invite Friends */}
+              <button
+                onClick={() => setIsInviteModalOpen(true)}
+                className="p-3 rounded-2xl bg-[#141926] hover:bg-pink-500 hover:text-white text-gray-200 border border-white/10 hover:border-pink-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
+              >
+                <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">👥</span>
+                <span className="text-xs font-black">Invite Friends</span>
+                <span className="text-[10px] text-gray-400 group-hover:text-white/80">Server code</span>
+              </button>
+
+              {/* Action 3: Join Voice */}
+              <button
+                onClick={() => {
+                  const voiceCh = activeServer?.channels.find(c => c.type === 'VOICE');
+                  if (voiceCh) setActiveChannel(voiceCh.id);
+                }}
+                className="p-3 rounded-2xl bg-[#141926] hover:bg-cyan-400 hover:text-black text-gray-200 border border-white/10 hover:border-cyan-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
+              >
+                <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">🎙️</span>
+                <span className="text-xs font-black">Join Voice</span>
+                <span className="text-[10px] text-gray-400 group-hover:text-black/80">HD Talk & Video</span>
+              </button>
+
+              {/* Action 4: Nitro Perks */}
+              <button
+                onClick={() => setIsNitroModalOpen(true)}
+                className="p-3 rounded-2xl bg-[#141926] hover:bg-gradient-to-tr hover:from-pink-500 hover:to-yellow-400 hover:text-black text-gray-200 border border-white/10 hover:border-yellow-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
+              >
+                <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">⚡</span>
+                <span className="text-xs font-black">Nitro & Gifts</span>
+                <span className="text-[10px] text-gray-400 group-hover:text-black/80">Unlock perks</span>
+              </button>
+            </div>
+          </div>
+
           {isLoading ? (
             <div className="text-cyan-400/60 text-center w-full py-4 text-xs font-bold">Loading messages...</div>
           ) : (
             <>
-              {/* Message List Items */}
-              {filteredMessages.map((msg) => (
+              {/* Message List Items (Chronological from Top to Bottom) */}
+              {filteredMessages.slice().reverse().map((msg) => (
                 <div key={msg.id} className="group hover:bg-[#111522] -mx-4 px-4 py-2.5 rounded-2xl transition-colors border border-transparent hover:border-cyan-500/15">
                   <div className="flex items-start">
                     <img 
@@ -208,82 +287,11 @@ export const ChatArea: React.FC = () => {
                   </div>
                 </div>
               ))}
-
-              {/* ──────── RENOVATED HERO WELCOME HUB ──────── */}
-              <div className="flex flex-col items-center justify-center text-center my-8 p-8 bg-gradient-to-b from-[#111522]/80 to-transparent rounded-3xl border border-cyan-500/20 shadow-2xl relative overflow-hidden animate-fade-in">
-                {/* Glowing Ambient Background Circles */}
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-32 bg-gradient-to-r from-pink-500/20 via-purple-500/20 to-cyan-500/20 rounded-full blur-3xl pointer-events-none" />
-
-                {/* Hero Icon Emblem */}
-                <div className="relative mb-4">
-                  <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-blue-600 via-cyan-500 to-pink-500 p-0.5 shadow-2xl shadow-cyan-500/20 flex items-center justify-center animate-character-float">
-                    <div className="w-full h-full bg-[#0E121B] rounded-[22px] flex items-center justify-center">
-                      <Hash size={40} className="text-cyan-400 stroke-[2.5]" />
-                    </div>
-                  </div>
-                  <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-pink-500 flex items-center justify-center text-white text-xs shadow-md">
-                    ✨
-                  </div>
-                </div>
-
-                {/* Main Heading & Subtitle */}
-                <h1 className="text-2xl md:text-4xl font-black text-white tracking-tight mb-2">
-                  Welcome to <span className="bg-gradient-to-r from-cyan-400 via-pink-400 to-yellow-300 bg-clip-text text-transparent">#{activeChannel.name}!</span> 👋
-                </h1>
-                <p className="text-gray-400 text-xs md:text-sm max-w-md mx-auto leading-relaxed">
-                  This is the very start of the <strong className="text-cyan-300">#{activeChannel.name}</strong> channel. 
-                  Send a wave, hop into voice, or invite your friends to start chatting!
-                </p>
-
-                {/* Quick Starter Action Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 w-full max-w-2xl">
-                  {/* Action 1: Send Wave */}
-                  <button
-                    onClick={handleSendWave}
-                    className="p-3 rounded-2xl bg-[#141926] hover:bg-cyan-400 hover:text-black text-gray-200 border border-white/10 hover:border-cyan-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
-                  >
-                    <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">👋</span>
-                    <span className="text-xs font-black">Send a Wave</span>
-                    <span className="text-[10px] text-gray-400 group-hover:text-black/80">Say hello!</span>
-                  </button>
-
-                  {/* Action 2: Invite Friends */}
-                  <button
-                    onClick={() => setIsInviteModalOpen(true)}
-                    className="p-3 rounded-2xl bg-[#141926] hover:bg-pink-500 hover:text-white text-gray-200 border border-white/10 hover:border-pink-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
-                  >
-                    <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">👥</span>
-                    <span className="text-xs font-black">Invite Friends</span>
-                    <span className="text-[10px] text-gray-400 group-hover:text-white/80">Server code</span>
-                  </button>
-
-                  {/* Action 3: Join Voice */}
-                  <button
-                    onClick={() => {
-                      const voiceCh = activeServer?.channels.find(c => c.type === 'VOICE');
-                      if (voiceCh) setActiveChannel(voiceCh.id);
-                    }}
-                    className="p-3 rounded-2xl bg-[#141926] hover:bg-cyan-400 hover:text-black text-gray-200 border border-white/10 hover:border-cyan-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
-                  >
-                    <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">🎙️</span>
-                    <span className="text-xs font-black">Join Voice</span>
-                    <span className="text-[10px] text-gray-400 group-hover:text-black/80">HD Talk & Video</span>
-                  </button>
-
-                  {/* Action 4: Nitro Perks */}
-                  <button
-                    onClick={() => setIsNitroModalOpen(true)}
-                    className="p-3 rounded-2xl bg-[#141926] hover:bg-gradient-to-tr hover:from-pink-500 hover:to-yellow-400 hover:text-black text-gray-200 border border-white/10 hover:border-yellow-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
-                  >
-                    <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">⚡</span>
-                    <span className="text-xs font-black">Nitro & Gifts</span>
-                    <span className="text-[10px] text-gray-400 group-hover:text-black/80">Unlock perks</span>
-                  </button>
-                </div>
-              </div>
+              <div ref={messagesEndRef} />
             </>
           )}
         </div>
+
 
         {/* Input Area */}
         <div className="px-6 pb-6 pt-2 shrink-0 relative bg-[#0E121B]">
