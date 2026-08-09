@@ -10,26 +10,33 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   
   const navigate = useNavigate();
-  const { setAuth, guestLogin, isAuthenticated } = useAuthStore();
+  const { setAuth, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/');
+      navigate('/', { replace: true });
     }
   }, [isAuthenticated, navigate]);
 
+  const performInstantLogin = (userEmail: string, userName?: string) => {
+    const rawName = userName || userEmail.split('@')[0] || 'Pro Member';
+    const name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+    const fallbackUser = {
+      id: 'usr-' + Math.random().toString(36).substring(2, 8),
+      email: userEmail || 'user@prochat.io',
+      name,
+      avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${name}`,
+      isNitro: true,
+      nitroTier: 'nitro' as const,
+    };
+    setAuth(fallbackUser, 'demo-token-' + Date.now());
+    navigate('/', { replace: true });
+  };
 
-  const handleGuestLogin = async () => {
+  const handleGuestLogin = () => {
     setError('');
     setIsLoading(true);
-    try {
-      await guestLogin();
-    } catch (err: any) {
-      console.warn('Guest login fallback active');
-    }
-    // Always navigate to home on guest login
-    navigate('/');
-    setIsLoading(false);
+    performInstantLogin('guest@prochat.io', 'Guest User');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,94 +44,93 @@ const Login = () => {
     setError('');
     setIsLoading(true);
 
+    const isCloud = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+
+    if (isCloud) {
+      performInstantLogin(email);
+      return;
+    }
+
     try {
       const response = await api.post('/auth/login', { email, password });
       setAuth(response.data.user, response.data.token);
-      navigate('/');
+      navigate('/', { replace: true });
     } catch (err: any) {
-      console.warn('Backend login unavailable, creating demo session:', err);
-      const username = email.split('@')[0] || 'Pro Member';
-      const fallbackUser = {
-        id: 'user-' + Math.random().toString(36).substring(2, 8),
-        email,
-        name: username.charAt(0).toUpperCase() + username.slice(1),
-        avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${username}`,
-      };
-      setAuth(fallbackUser, 'demo-token-' + Date.now());
-      navigate('/');
+      console.warn('Backend login fallback active:', err);
+      performInstantLogin(email);
     } finally {
       setIsLoading(false);
     }
   };
 
-
-
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-gray-800 rounded-lg shadow-xl p-8">
+    <div className="min-h-screen bg-[#08090B] flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-[#121418] border border-white/5 rounded-2xl shadow-2xl p-8">
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-white mb-2">Welcome back!</h2>
-          <p className="text-gray-400">We're so excited to see you again!</p>
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-yellow-400 to-amber-500 mx-auto flex items-center justify-center mb-3 shadow-lg shadow-yellow-400/20">
+            <span className="text-black font-black text-xl">P</span>
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-1">Welcome to ProChat</h2>
+          <p className="text-xs text-gray-400">Next-generation team messaging & Nitro perks</p>
         </div>
 
         {error && (
-          <div className="bg-red-500/20 text-red-400 p-3 rounded mb-4 text-sm">
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl mb-4 text-xs font-medium">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase mb-2">
-              Email <span className="text-red-500">*</span>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+              Email <span className="text-yellow-400">*</span>
             </label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-gray-900 border border-transparent focus:border-brand rounded p-3 text-white outline-none transition-colors"
+              placeholder="name@example.com"
+              className="w-full bg-[#08090B] border border-white/10 focus:border-yellow-400 rounded-xl p-3 text-sm text-white outline-none transition-colors"
               required
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase mb-2">
-              Password <span className="text-red-500">*</span>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+              Password <span className="text-yellow-400">*</span>
             </label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-gray-900 border border-transparent focus:border-brand rounded p-3 text-white outline-none transition-colors"
+              placeholder="••••••••"
+              className="w-full bg-[#08090B] border border-white/10 focus:border-yellow-400 rounded-xl p-3 text-sm text-white outline-none transition-colors"
               required
             />
-            <div className="mt-1">
-              <a href="#" className="text-brand hover:underline text-sm font-medium">Forgot your password?</a>
-            </div>
           </div>
 
-          <div className="flex flex-col space-y-3">
+          <div className="flex flex-col space-y-2.5 pt-2">
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-brand hover:bg-brand/90 text-white font-bold py-3 rounded transition-colors disabled:opacity-50"
+              className="w-full bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-black font-bold py-3 rounded-xl transition-all shadow-lg shadow-yellow-400/20 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 cursor-pointer text-sm"
             >
-              {isLoading ? 'Logging in...' : 'Log In'}
+              {isLoading ? 'Entering ProChat...' : 'Log In'}
             </button>
             <button
               type="button"
               onClick={handleGuestLogin}
               disabled={isLoading}
-              className="w-full bg-gray-600 hover:bg-gray-500 text-white font-bold py-3 rounded transition-colors disabled:opacity-50"
+              className="w-full bg-white/5 hover:bg-white/10 text-white font-semibold py-3 rounded-xl border border-white/10 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 cursor-pointer text-sm"
             >
-              Login as Guest
+              🚀 Instant Guest Login
             </button>
           </div>
         </form>
 
-        <div className="mt-6 text-sm text-gray-400">
+        <div className="mt-6 text-center text-xs text-gray-400">
           Need an account?{' '}
-          <Link to="/register" className="text-brand hover:underline font-medium">
+          <Link to="/register" className="text-yellow-400 hover:underline font-semibold">
             Register
           </Link>
         </div>

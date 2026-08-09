@@ -20,7 +20,7 @@ interface AuthState {
   logout: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => {
+export const useAuthStore = create<AuthState>((set, get) => {
   // Check local storage for initial state
   const token = localStorage.getItem('token');
   const userStr = localStorage.getItem('user');
