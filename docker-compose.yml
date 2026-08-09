@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: prochat-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: prochat
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  server:
+    build: 
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: prochat-server
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/prochat?schema=public
+      - JWT_SECRET=super_secret_key_change_me_in_production
+      - PORT=5000
+      - FRONTEND_URL=http://localhost:5173
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    command: sh -c "npx prisma migrate dev --name init && npm run dev"
+
+volumes:
+  postgres_data:

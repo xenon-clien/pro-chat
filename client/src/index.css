@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #5865F2;
+  --color-gray-900: #202225;
+  --color-gray-800: #2f3136;
+  --color-gray-700: #36393f;
+  --color-gray-600: #4f545c;
+}
+
+@layer base {
+  body {
+    @apply bg-gray-900 text-gray-100 overflow-hidden select-none;
+  }
+}
+
+/* Custom Scrollbar for Discord-like feel */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #2f3136; 
+}
+::-webkit-scrollbar-thumb {
+  background: #202225; 
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #18191c; 
+}
