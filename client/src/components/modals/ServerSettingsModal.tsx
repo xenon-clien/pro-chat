@@ -557,7 +557,9 @@ export const ServerSettingsModal: React.FC<ServerSettingsModalProps> = ({ isOpen
                             <div className="flex items-center">
                               <span className="text-sm font-bold text-white mr-1.5">{member.user?.name}</span>
                               {isMemberOwner && (
-                                <Crown size={14} className="text-yellow-400 shrink-0" title="Server Owner" />
+                                <span title="Server Owner">
+                                  <Crown size={14} className="text-yellow-400 shrink-0" />
+                                </span>
                               )}
                             </div>
                             <span className="text-[11px] text-gray-500">{member.user?.email}</span>
