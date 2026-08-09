@@ -1,50 +1,100 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand: #FACC15;
-  --color-brand-hover: #EAB308;
-  --color-gray-950: #08090B;
-  --color-gray-900: #0D0E12;
-  --color-gray-850: #121418;
-  --color-gray-800: #171920;
-  --color-gray-700: #1F222B;
-  --color-gray-600: #2C303D;
+  --color-brand: #38BDF8;
+  --color-brand-pink: #F472B6;
+  --color-brand-cyan: #06B6D4;
+  --color-brand-blue: #60A5FA;
+  --color-gray-950: #07090E;
+  --color-gray-900: #0B0E14;
+  --color-gray-850: #10141E;
+  --color-gray-800: #151B28;
+  --color-gray-700: #1D2436;
+  --color-gray-600: #293249;
 }
 
 @layer base {
   body {
-    @apply bg-[#0D0E12] text-[#E5E7EB] overflow-hidden select-none;
+    @apply bg-[#0B0E14] text-[#E2E8F0] overflow-hidden select-none font-sans;
   }
 }
 
-/* Custom Yellow & Black Scrollbar */
+/* Custom Light Pink & Electric Blue Scrollbar */
 ::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0D0E12; 
+  background: #0B0E14; 
 }
 ::-webkit-scrollbar-thumb {
-  background: #242731; 
+  background: #1D2436; 
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #FACC15; 
+  background: #38BDF8; 
 }
 
-/* Soundboard slide-up animation */
-@keyframes slideUp {
+/* Character Speaking Glow & Float Animations */
+@keyframes speakingRing {
+  0% {
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7), 0 0 20px rgba(244, 114, 182, 0.4);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(56, 189, 248, 0), 0 0 35px rgba(244, 114, 182, 0.8);
+    transform: scale(1.03);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0), 0 0 20px rgba(244, 114, 182, 0.4);
+    transform: scale(1);
+  }
+}
+
+@keyframes floatBob {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(1deg);
+  }
+}
+
+@keyframes radarWave {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+.animate-speaking-glow {
+  animation: speakingRing 2s infinite ease-in-out;
+}
+
+.animate-character-float {
+  animation: floatBob 4s ease-in-out infinite;
+}
+
+.animate-radar-wave {
+  animation: radarWave 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Modal animations */
+@keyframes scaleUp {
   from {
     opacity: 0;
-    transform: translateY(16px) scale(0.97);
+    transform: scale(0.96) translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: scale(1) translateY(0);
   }
 }
 
-.animate-slide-up {
-  animation: slideUp 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+.animate-scale-up {
+  animation: scaleUp 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
 }

@@ -1,122 +1,88 @@
 import React, { useState } from 'react';
-import { Plus, Compass, Zap } from 'lucide-react';
+import { Plus, Compass, Zap, LogOut } from 'lucide-react';
 import { useServerStore } from '../../store/useServerStore';
+import { useAuthStore } from '../../store/useAuthStore';
 import { useNitroStore } from '../../store/useNitroStore';
 import { CreateServerModal } from '../modals/CreateServerModal';
 import { NitroModal } from '../modals/NitroModal';
 import DiscordNotificationBadge from '../ui/DiscordNotificationBadge';
 import clsx from 'clsx';
 
-
-const ServerSidebar = () => {
+export const ServerSidebar: React.FC = () => {
   const { servers, activeServerId, setActiveServer } = useServerStore();
+  const { logout } = useAuthStore();
   const { isNitro } = useNitroStore();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isNitroModalOpen, setIsNitroModalOpen] = useState(false);
 
   return (
     <>
-      <div className="w-[72px] h-full bg-[#08090B] flex flex-col items-center py-3 space-y-2 z-20 shrink-0 border-r border-[#171920]">
-        {/* Home Button (Direct Messages) with Discord 9+ Notification Badge */}
-        <div 
-          onClick={() => setActiveServer('home')}
-          title="Direct Messages"
-          className="relative group"
-        >
-          {/* Active indicator pill */}
-          <div className={clsx(
-            "absolute -left-3 top-1/2 -translate-y-1/2 w-1 bg-white rounded-r-full transition-all duration-200 z-10",
-            activeServerId === 'home' ? "h-10" : "h-2 group-hover:h-5"
-          )} />
-
-          <div className={clsx(
-            "w-12 h-12 transition-all duration-200 cursor-pointer flex items-center justify-center overflow-hidden shadow-lg border",
-            activeServerId === 'home'
-              ? "bg-yellow-400 text-black rounded-2xl border-yellow-300 shadow-yellow-400/30 ring-2 ring-yellow-400 ring-offset-2 ring-offset-[#08090B]"
-              : "bg-[#171920] hover:bg-yellow-400 hover:text-black text-yellow-400 hover:rounded-2xl rounded-3xl border-yellow-400/20 hover:border-yellow-400"
-          )}>
-            <span className="font-black text-sm tracking-wider">PRO</span>
-          </div>
-
-          {/* Discord 9+ Red Notification Badge */}
-          <div className="absolute -bottom-1 -right-1 pointer-events-none">
-            <DiscordNotificationBadge count="9+" size="sm" variant="red" />
-          </div>
-        </div>
-
-        {/* Nitro Direct Button */}
-        <div
-          onClick={() => setIsNitroModalOpen(true)}
-          title={isNitro ? "ProChat Nitro Active" : "ProChat Nitro"}
-          className={clsx(
-            "w-12 h-12 hover:rounded-2xl rounded-3xl transition-all duration-200 cursor-pointer flex items-center justify-center relative group shadow-md",
-            isNitro
-              ? "bg-gradient-to-tr from-yellow-500/20 to-amber-400/30 text-yellow-400 border border-yellow-400/40 hover:border-yellow-400 hover:scale-105"
-              : "bg-[#171920] text-gray-400 hover:bg-yellow-400 hover:text-black border border-transparent hover:border-yellow-400"
-          )}
-        >
-          <Zap size={22} className={clsx(isNitro && "fill-yellow-400 text-yellow-400 animate-pulse")} />
-        </div>
-        
-        <div className="w-8 h-[2px] bg-[#1e222a] rounded-full mx-auto" />
-
-        {/* Real Servers */}
-        {servers.map((server, index) => (
-          <div 
-            key={server.id} 
-            onClick={() => setActiveServer(server.id)}
-            title={server.name}
-            className="relative group"
+      <div className="w-[72px] h-full bg-[#080A0F] flex flex-col items-center py-3 justify-between z-20 shrink-0 border-r border-[#151A26] select-none">
+        {/* Top Server Icons */}
+        <div className="flex flex-col items-center space-y-2.5 w-full">
+          {/* Lightning Bolt (Direct / Nitro) */}
+          <div
+            onClick={() => setIsNitroModalOpen(true)}
+            title="ProChat Nitro & Direct"
+            className="w-12 h-12 bg-[#141926] hover:bg-cyan-400 text-cyan-400 hover:text-black rounded-2xl transition-all duration-200 cursor-pointer flex items-center justify-center shadow-lg border border-cyan-500/20 hover:border-cyan-400 group"
           >
-            {/* Discord Active/Unread indicator pill */}
-            <div className={clsx(
-              "absolute -left-3 top-1/2 -translate-y-1/2 w-1 bg-white rounded-r-full transition-all duration-200 z-10",
-              activeServerId === server.id ? "h-10" : (index === 0 ? "h-2" : "h-2 group-hover:h-5")
-            )} />
-
-            <div className={clsx(
-              "w-12 h-12 hover:rounded-2xl rounded-3xl transition-all duration-200 cursor-pointer flex items-center justify-center relative group shadow-md overflow-hidden",
-              activeServerId === server.id 
-                ? "ring-2 ring-yellow-400 ring-offset-2 ring-offset-[#08090B] rounded-2xl shadow-yellow-400/20" 
-                : "hover:ring-2 hover:ring-yellow-400/60 hover:ring-offset-1 hover:ring-offset-[#08090B]"
-            )}>
-              {server.iconUrl ? (
-                <img
-                  src={server.iconUrl}
-                  alt={server.name}
-                  className="w-12 h-12 object-cover rounded-3xl group-hover:rounded-2xl transition-all duration-200"
-                />
-              ) : (
-                <div className={clsx(
-                  "w-12 h-12 flex items-center justify-center text-sm font-black uppercase tracking-tight",
-                  activeServerId === server.id ? "bg-yellow-400 text-black" : "bg-[#171920] text-gray-200 border border-gray-800 hover:bg-yellow-400 hover:text-black"
-                )}>
-                  {server.name.substring(0, 2)}
-                </div>
-              )}
-            </div>
-
-            {/* Unread mention badge on Server */}
-            {index === 0 && (
-              <div className="absolute -bottom-1 -right-1 pointer-events-none">
-                <DiscordNotificationBadge count={4} size="sm" variant="red" />
-              </div>
-            )}
+            <Zap size={22} className="group-hover:scale-110 transition-transform fill-cyan-400/20" />
           </div>
-        ))}
 
-        {/* Add Server Button */}
-        <div 
-          onClick={() => setIsCreateModalOpen(true)}
-          className="w-12 h-12 bg-[#171920] hover:bg-yellow-400 text-yellow-400 hover:text-black hover:rounded-2xl rounded-3xl transition-all duration-200 cursor-pointer flex items-center justify-center mt-2 group border border-yellow-400/30 hover:border-yellow-400 shadow-md shadow-yellow-400/5"
-          title="Add a Server"
-        >
-          <Plus size={24} className="group-hover:rotate-90 transition-transform duration-200 stroke-[2.5]" />
+          <div className="w-8 h-[2px] bg-white/10 rounded-full mx-auto" />
+
+          {/* Active Server (Pixel Robot Avatar) */}
+          {servers.map((server, index) => {
+            const isActive = activeServerId === server.id;
+            return (
+              <div 
+                key={server.id} 
+                onClick={() => setActiveServer(server.id)}
+                title={server.name}
+                className="relative group"
+              >
+                {/* Active Indicator Bar */}
+                <div className={clsx(
+                  "absolute -left-3.5 top-1/2 -translate-y-1/2 w-1.5 bg-cyan-400 rounded-r-full transition-all duration-200 z-10",
+                  isActive ? "h-10" : "h-2 group-hover:h-5"
+                )} />
+
+                <div className={clsx(
+                  "w-12 h-12 rounded-2xl transition-all duration-200 cursor-pointer flex items-center justify-center relative shadow-lg overflow-hidden border",
+                  isActive 
+                    ? "border-cyan-400 ring-2 ring-cyan-400/40 bg-gradient-to-tr from-blue-600 to-cyan-500" 
+                    : "bg-[#141926] border-white/10 hover:border-cyan-400/60"
+                )}>
+                  {/* Pixel Robot Icon matching screenshot */}
+                  <img
+                    src={server.iconUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${server.name}&backgroundColor=38bdf8`}
+                    alt={server.name}
+                    className="w-10 h-10 object-contain select-none"
+                  />
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Add Server Button */}
+          <div 
+            onClick={() => setIsCreateModalOpen(true)}
+            className="w-12 h-12 bg-[#141926] hover:bg-cyan-400 text-cyan-400 hover:text-black rounded-2xl transition-all duration-200 cursor-pointer flex items-center justify-center group border border-cyan-500/20 hover:border-cyan-400 shadow-md"
+            title="Add a Server"
+          >
+            <Plus size={22} className="group-hover:rotate-90 transition-transform stroke-[2.5]" />
+          </div>
         </div>
 
-        {/* Explore Button */}
-        <div className="w-12 h-12 bg-[#171920] hover:bg-yellow-400 text-gray-400 hover:text-black hover:rounded-2xl rounded-3xl transition-all duration-200 cursor-pointer flex items-center justify-center group border border-transparent hover:border-yellow-400">
-          <Compass size={22} />
+        {/* Bottom Exit / Logout Button (Matching Arrow in Screenshot) */}
+        <div className="w-full flex flex-col items-center">
+          <button 
+            onClick={logout}
+            className="w-12 h-12 bg-[#141926] hover:bg-rose-500 text-gray-400 hover:text-white rounded-2xl transition-all duration-200 cursor-pointer flex items-center justify-center border border-white/5 hover:border-rose-400 group"
+            title="Log Out"
+          >
+            <LogOut size={20} className="group-hover:translate-x-0.5 transition-transform" />
+          </button>
         </div>
       </div>
 
@@ -134,4 +100,3 @@ const ServerSidebar = () => {
 };
 
 export default ServerSidebar;
-

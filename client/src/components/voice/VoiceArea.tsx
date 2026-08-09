@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Volume2, Mic, MicOff, Video, VideoOff, ScreenShare, 
   PhoneOff, Users, Maximize2, Minimize2, Activity,
-  Radio, AlertCircle, Music2, Zap, Sparkles, Monitor
+  Radio, AlertCircle, Music2, Zap, Sparkles, Monitor,
+  Headphones, VolumeX, Shield, Crown
 } from 'lucide-react';
 import { useServerStore } from '../../store/useServerStore';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -10,27 +11,41 @@ import { useNitroStore } from '../../store/useNitroStore';
 import { useSocket } from '../../hooks/useSocket';
 import cloudRelay from '../../lib/cloudRelay';
 import SoundboardPanel from './SoundboardPanel';
-
 import { NitroModal } from '../modals/NitroModal';
 import NitroBadge from '../ui/NitroBadge';
 import clsx from 'clsx';
+
+interface VoiceMember {
+  id: string;
+  name: string;
+  avatarUrl: string;
+  isMuted: boolean;
+  isSpeaking: boolean;
+  isCameraOn?: boolean;
+  isScreenSharing?: boolean;
+  isYou?: boolean;
+  color?: string;
+  hasCrown?: boolean;
+}
 
 export const VoiceArea: React.FC = () => {
   const { servers, activeServerId, activeChannelId, setActiveChannel } = useServerStore();
   const { user } = useAuthStore();
   const { isNitro, nitroTier } = useNitroStore();
 
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [isDeafened, setIsDeafened] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [isSoundboardOpen, setIsSoundboardOpen] = useState(false);
   const [incomingSound, setIncomingSound] = useState<any>(null);
   const [isNitroModalOpen, setIsNitroModalOpen] = useState(false);
-  const [streamQuality, setStreamQuality] = useState<'720p' | '1080p'>(isNitro ? '1080p' : '720p');
+  const [speakingMap, setSpeakingMap] = useState<Record<string, boolean>>({
+    'harsh': true,
+  });
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -38,12 +53,54 @@ export const VoiceArea: React.FC = () => {
   const screenStreamRef = useRef<MediaStream | null>(null);
   const screenContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const activeServer = servers.find(s => s.id === activeServerId);
-  const activeChannel = activeServer?.channels.find(c => c.id === activeChannelId);
+  const activeServer = servers.find(s => s.id === activeServerId) || servers[0];
+  const activeChannel = activeServer?.channels.find(c => c.id === activeChannelId) || activeServer?.channels[0];
 
   const socket = useSocket(activeChannelId || '');
 
-  // Handle Camera Feed
+  // Simulate speaking pulses for dynamic feel
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSpeakingMap(prev => ({
+        ...prev,
+        'harsh': Math.random() > 0.3,
+        'wanzxplays': Math.random() > 0.7,
+      }));
+    }, 2500);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Voice Members matching the screenshot
+  const connectedMembers: VoiceMember[] = [
+    {
+      id: user?.id || 'me',
+      name: user?.name || 'shivam',
+      avatarUrl: user?.avatarUrl || 'https://api.dicebear.com/7.x/bottts/svg?seed=shivam&backgroundColor=fbbf24',
+      isMuted: isMuted,
+      isSpeaking: !isMuted,
+      isYou: true,
+      color: '#F59E0B',
+    },
+    {
+      id: 'mem-harsh',
+      name: 'harsh',
+      avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=harshRobot&backgroundColor=fef08a',
+      isMuted: false,
+      isSpeaking: speakingMap['harsh'] || false,
+      color: '#EAB308',
+    },
+    {
+      id: 'mem-wanzx',
+      name: 'wanzxplays',
+      avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=wanzxplays&backgroundColor=38bdf8',
+      isMuted: false,
+      isSpeaking: speakingMap['wanzxplays'] || false,
+      hasCrown: true,
+      color: '#38BDF8',
+    }
+  ];
+
+  // Camera handling
   useEffect(() => {
     if (isCameraOn) {
       navigator.mediaDevices?.getUserMedia({ video: true, audio: true })
@@ -57,7 +114,7 @@ export const VoiceArea: React.FC = () => {
         })
         .catch((err) => {
           console.error('Camera error:', err);
-          setStreamError('Could not access camera. Please check browser permissions.');
+          setStreamError('Could not access camera. Please check permissions.');
           setIsCameraOn(false);
         });
     } else {
@@ -77,7 +134,7 @@ export const VoiceArea: React.FC = () => {
     };
   }, [isCameraOn]);
 
-  // Handle Screen Share Stream
+  // Screen sharing
   const toggleScreenShare = async () => {
     if (isScreenSharing) {
       if (screenStreamRef.current) {
@@ -99,7 +156,6 @@ export const VoiceArea: React.FC = () => {
         setIsScreenSharing(true);
         setStreamError(null);
 
-        // Auto detect when user stops sharing via browser bar
         displayStream.getVideoTracks()[0].onended = () => {
           setIsScreenSharing(false);
           setIsFocusMode(false);
@@ -111,47 +167,16 @@ export const VoiceArea: React.FC = () => {
       } catch (err: any) {
         console.error('Screen share error:', err);
         if (err.name !== 'NotAllowedError') {
-          setStreamError('Failed to start screen sharing: ' + (err.message || 'Permission denied'));
+          setStreamError('Failed to start screen share: ' + (err.message || 'Permission denied'));
         }
       }
     }
   };
 
-  // Toggle Native Browser Fullscreen
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      screenContainerRef.current?.requestFullscreen().catch(err => {
-        console.error('Error attempting to enable fullscreen:', err);
-      });
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(err => console.error(err));
-      setIsFullscreen(false);
-    }
-  };
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
-
-  // Listen for incoming soundboard events from other users globally
+  // Soundboard handling
   useEffect(() => {
     if (!activeChannelId) return;
 
-    // 1. Socket.io handler (if local/backend socket is connected)
-    const handleIncomingSound = (data: any) => {
-      setIncomingSound(data);
-      setTimeout(() => setIncomingSound(null), 100);
-    };
-    if (socket) {
-      socket.on('soundboard:incoming', handleIncomingSound);
-    }
-
-    // 2. Global Cloud Relay handler (works over public internet on Vercel)
     const voiceTopic = `prochat/v1/voice/${activeChannelId}`;
     const unsub = cloudRelay.subscribe(voiceTopic, (_, data) => {
       if (data && data.type === 'SOUNDBOARD' && data.sound) {
@@ -160,16 +185,11 @@ export const VoiceArea: React.FC = () => {
       }
     });
 
-    return () => { 
-      if (socket) socket.off('soundboard:incoming', handleIncomingSound);
-      unsub();
-    };
-  }, [socket, activeChannelId]);
+    return () => { unsub(); };
+  }, [activeChannelId]);
 
-  // Broadcast soundboard sound via cloudRelay and socket
   const handlePlaySound = useCallback((sound: any) => {
     if (!activeChannelId) return;
-
     const payload = {
       channelId: activeChannelId,
       soundId: sound.id,
@@ -177,21 +197,12 @@ export const VoiceArea: React.FC = () => {
       audioDataUrl: sound.audioDataUrl,
       volume: 0.7,
     };
-
-    // Publish to global cloud relay
     cloudRelay.publish(`prochat/v1/voice/${activeChannelId}`, {
       type: 'SOUNDBOARD',
       sound: payload
     });
+  }, [activeChannelId]);
 
-    // Also emit over socket if available
-    if (socket) {
-      socket.emit('soundboard:play', payload);
-    }
-  }, [socket, activeChannelId]);
-
-
-  // Toggle Mic Track
   const toggleMute = () => {
     setIsMuted(!isMuted);
     if (localStreamRef.current) {
@@ -202,7 +213,6 @@ export const VoiceArea: React.FC = () => {
     }
   };
 
-  // Disconnect from voice channel and return to text channel
   const handleDisconnect = () => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
@@ -216,44 +226,30 @@ export const VoiceArea: React.FC = () => {
     }
   };
 
-  if (!activeChannel) return null;
-
   return (
-    <div className="flex-1 flex flex-col bg-[#0D0E12] h-full min-w-0 overflow-hidden select-none">
-      {/* Voice Channel Top Header */}
-      <div className="h-12 border-b border-[#171920] px-4 flex items-center justify-between shrink-0 bg-[#090A0D]">
-        <div className="flex items-center">
-          <Volume2 size={22} className="text-yellow-400 mr-2.5 shrink-0" />
-          <span className="text-white font-black text-base tracking-tight">{activeChannel.name}</span>
-          <div className="flex items-center space-x-2 ml-4 px-2.5 py-0.5 bg-yellow-400/10 border border-yellow-400/30 rounded-full text-yellow-400 text-xs font-extrabold">
-            <Radio size={12} className="animate-pulse text-yellow-400" />
-            <span>Voice Connected (RTC Live)</span>
+    <div className="flex-1 flex flex-col bg-[#0B0E14] h-full min-w-0 overflow-hidden select-none">
+      {/* Top Header Bar (Matching Screenshot) */}
+      <div className="h-14 border-b border-[#181D2A] px-6 flex items-center justify-between shrink-0 bg-[#0E121B]">
+        {/* Left: Channel Name & Connected Pill */}
+        <div className="flex items-center space-x-3">
+          <Volume2 size={20} className="text-cyan-400 shrink-0" />
+          <span className="text-white font-black text-base tracking-tight">{activeChannel?.name || 'General Voice'}</span>
+          <div className="flex items-center px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-emerald-400 text-xs font-bold shadow-sm">
+            <span>{connectedMembers.length} Connected</span>
           </div>
         </div>
 
-        <div className="flex items-center space-x-3 text-xs font-bold text-gray-400">
-          {isScreenSharing && (
-            <button
-              onClick={() => setIsFocusMode(!isFocusMode)}
-              className={clsx(
-                "px-2.5 py-1 rounded-lg border transition-colors flex items-center space-x-1 cursor-pointer",
-                isFocusMode ? "bg-yellow-400 text-black border-yellow-400 font-bold" : "bg-[#171920] border-gray-800 text-gray-300 hover:text-yellow-400"
-              )}
-              title="Toggle Full Focus Mode"
-            >
-              <Maximize2 size={13} />
-              <span>{isFocusMode ? 'Show Members' : 'Focus Mode'}</span>
-            </button>
-          )}
-          <div className="flex items-center text-emerald-400">
-            <Activity size={14} className="mr-1" />
-            <span>24ms / HD Audio</span>
+        {/* Right: Target Quality Badge */}
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-1.5 px-3.5 py-1 bg-[#131826] border border-cyan-500/30 rounded-xl text-cyan-400 text-xs font-black shadow-lg shadow-cyan-500/10">
+            <Zap size={14} className="fill-cyan-400 text-cyan-400" />
+            <span>1080p @ 60fps Target</span>
           </div>
         </div>
       </div>
 
-      {/* Main Video & Screen Share Area */}
-      <div className="flex-1 p-3 md:p-4 flex flex-col items-center justify-center overflow-hidden relative">
+      {/* Main Voice Stage (Big Animated Characters) */}
+      <div className="flex-1 p-6 flex flex-col items-center justify-center overflow-y-auto custom-scrollbar relative">
         {streamError && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 flex items-center px-4 py-2 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold rounded-xl shadow-lg">
             <AlertCircle size={16} className="mr-2 shrink-0" />
@@ -261,16 +257,9 @@ export const VoiceArea: React.FC = () => {
           </div>
         )}
 
-        {/* Max-Sized Screen Share Display (Cinema Mode) */}
+        {/* Screen share view if active */}
         {isScreenSharing && (
-          <div 
-            ref={screenContainerRef}
-            onDoubleClick={toggleFullscreen}
-            className={clsx(
-              "w-full bg-[#08090B] rounded-2xl border-2 border-yellow-400/50 overflow-hidden relative shadow-2xl flex flex-col group transition-all",
-              isFullscreen ? "h-screen w-screen border-none rounded-none" : isFocusMode ? "h-full max-h-[86vh]" : "h-[70%] max-h-[76vh] mb-3"
-            )}
-          >
+          <div className="w-full max-w-5xl h-[65vh] bg-[#07090E] rounded-3xl border-2 border-cyan-400/50 overflow-hidden relative shadow-2xl mb-4 flex flex-col group">
             <video 
               ref={(el) => {
                 screenVideoRef.current = el;
@@ -282,31 +271,15 @@ export const VoiceArea: React.FC = () => {
               autoPlay 
               playsInline 
               muted
-              className="w-full h-full object-contain bg-black cursor-pointer"
+              className="w-full h-full object-contain bg-black"
             />
-            
-            {/* Top Stream Overlay Info */}
-            <div className="absolute top-3 left-3 flex items-center space-x-2 bg-black/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-yellow-400/30 text-xs font-bold text-yellow-400 shadow-lg">
-              <ScreenShare size={14} />
-              <span>{user?.name}'s Screen • 1080p 60fps HD</span>
+            <div className="absolute top-3 left-3 bg-black/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-cyan-400/30 text-xs font-bold text-cyan-300">
+              {user?.name}'s Screen • 1080p 60FPS
             </div>
-
-            {/* Top Right Maximize & Fullscreen Controls */}
-            <div className="absolute top-3 right-3 flex items-center space-x-2 opacity-90 group-hover:opacity-100 transition-opacity">
-              <button
-                onClick={toggleFullscreen}
-                className="bg-black/80 hover:bg-yellow-400 hover:text-black text-yellow-400 backdrop-blur-md p-2 rounded-xl border border-yellow-400/30 transition-colors shadow-lg cursor-pointer"
-                title={isFullscreen ? "Exit Fullscreen" : "Maximize / Fullscreen"}
-              >
-                {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-              </button>
-            </div>
-
-            {/* Bottom Floating Stop Button */}
-            <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute bottom-3 right-3">
               <button 
                 onClick={toggleScreenShare}
-                className="bg-rose-600 hover:bg-rose-500 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-xl transition-transform active:scale-95 cursor-pointer"
+                className="bg-rose-600 hover:bg-rose-500 text-white font-black text-xs px-4 py-2 rounded-xl shadow-lg cursor-pointer"
               >
                 Stop Sharing
               </button>
@@ -314,84 +287,76 @@ export const VoiceArea: React.FC = () => {
           </div>
         )}
 
-        {/* Member Video / Avatar Grid */}
-        {(!isFocusMode || !isScreenSharing) && (
-          <div className={clsx(
-            "w-full grid gap-3 place-items-center transition-all",
-            isScreenSharing ? "grid-cols-2 md:grid-cols-4 max-w-4xl h-[26%]" : "grid-cols-1 md:grid-cols-2 max-w-4xl h-[75%]"
-          )}>
-            {/* User's Video / Avatar Tile */}
-            <div className={clsx(
-              "w-full h-full min-h-[120px] bg-[#121418] rounded-2xl border flex flex-col items-center justify-center relative overflow-hidden shadow-xl transition-all",
-              isSpeaking ? "border-yellow-400 ring-2 ring-yellow-400/30" : "border-[#1e222a]"
-            )}>
-              {isCameraOn ? (
-                <video 
-                  ref={(el) => {
-                    localVideoRef.current = el;
-                    if (el && localStreamRef.current) {
-                      el.srcObject = localStreamRef.current;
-                      el.play().catch(e => console.error(e));
-                    }
-                  }}
-                  autoPlay 
-                  playsInline 
-                  muted 
-                  className="w-full h-full object-cover rounded-2xl"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center">
-                  {user?.avatarUrl ? (
-                    <img 
-                      src={user.avatarUrl} 
-                      alt="Avatar" 
-                      className={clsx(
-                        "w-14 h-14 md:w-18 md:h-18 rounded-2xl object-cover border-2 border-yellow-400 shadow-xl transition-transform",
-                        isSpeaking && "scale-110 shadow-yellow-400/30"
-                      )}
-                    />
-                  ) : (
-                    <div className={clsx(
-                      "w-14 h-14 md:w-18 md:h-18 rounded-2xl bg-yellow-400 text-black flex items-center justify-center font-black text-2xl shadow-xl transition-transform",
-                      isSpeaking && "scale-110 shadow-yellow-400/30"
-                    )}>
-                      {user?.name?.substring(0, 2).toUpperCase() || 'GU'}
-                    </div>
+        {/* Voice Character Cards Grid */}
+        <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 place-items-stretch">
+          {connectedMembers.map((member) => (
+            <div
+              key={member.id}
+              className={clsx(
+                "h-64 bg-[#111522] rounded-3xl border p-6 flex flex-col items-center justify-between relative shadow-xl transition-all duration-300 group",
+                member.isSpeaking
+                  ? "border-cyan-400/80 ring-2 ring-cyan-400/30 shadow-cyan-500/10 scale-[1.01]"
+                  : "border-[#1D2538] hover:border-pink-400/40"
+              )}
+            >
+              {/* Top Crown indicator if owner */}
+              <div className="w-full flex justify-end">
+                {member.hasCrown && (
+                  <div className="text-yellow-400 text-xs flex items-center gap-1 font-bold">
+                    <Crown size={14} className="fill-yellow-400" />
+                  </div>
+                )}
+              </div>
+
+              {/* Central Big Animated Character */}
+              <div className="relative flex items-center justify-center my-auto">
+                {/* Speaking Wave Ripple */}
+                {member.isSpeaking && (
+                  <>
+                    <div className="absolute w-36 h-36 rounded-full border-2 border-cyan-400/40 animate-radar-wave pointer-events-none" />
+                    <div className="absolute w-44 h-44 rounded-full border border-pink-400/30 animate-radar-wave pointer-events-none delay-300" />
+                  </>
+                )}
+
+                {/* Main Avatar Container */}
+                <div 
+                  className={clsx(
+                    "w-28 h-28 rounded-full bg-[#0A0D14] flex items-center justify-center relative overflow-hidden transition-all duration-300 shadow-2xl animate-character-float",
+                    member.isSpeaking
+                      ? "ring-4 ring-cyan-400 ring-offset-4 ring-offset-[#111522] shadow-cyan-400/40"
+                      : "ring-2 ring-white/10"
                   )}
+                >
+                  <img
+                    src={member.avatarUrl}
+                    alt={member.name}
+                    className="w-24 h-24 object-contain transition-transform duration-300 group-hover:scale-110 select-none pointer-events-none"
+                  />
                 </div>
-              )}
 
-              {/* Tile Bottom Name Badge */}
-              <div className="absolute bottom-2.5 left-2.5 flex items-center space-x-1.5 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded-lg border border-gray-800 text-[11px] font-bold text-white">
-                <span>{user?.name} (You)</span>
-                {isMuted && <MicOff size={11} className="text-rose-400" />}
+                {/* Muted Microphone Badge (Bottom Right of Avatar) */}
+                {member.isMuted && (
+                  <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-rose-600 border-2 border-[#111522] flex items-center justify-center text-white shadow-lg animate-scale-up">
+                    <MicOff size={15} />
+                  </div>
+                )}
               </div>
 
-              {/* Live Badge */}
-              {isScreenSharing && (
-                <div className="absolute top-2 right-2 bg-yellow-400 text-black text-[9px] font-black px-1.5 py-0.5 rounded uppercase shadow-sm">
-                  Live
-                </div>
-              )}
-            </div>
-
-            {/* Connected Peers Mock Tile */}
-            <div className="w-full h-full min-h-[120px] bg-[#121418] rounded-2xl border border-[#1e222a] flex flex-col items-center justify-center relative overflow-hidden shadow-xl">
-              <div className="flex flex-col items-center justify-center opacity-60">
-                <div className="w-14 h-14 md:w-18 md:h-18 rounded-2xl bg-[#1e222a] text-gray-400 border border-gray-800 flex items-center justify-center font-black text-xl mb-1">
-                  <Users size={24} />
-                </div>
-                <span className="text-[11px] text-gray-500 font-bold">Waiting for members</span>
-              </div>
-              <div className="absolute bottom-2.5 left-2.5 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded-lg border border-gray-800 text-[10px] font-bold text-gray-400">
-                Open Channel
+              {/* Bottom Member Name & "YOU" Badge */}
+              <div className="flex items-center space-x-2">
+                <span className="text-white font-extrabold text-sm tracking-tight">{member.name}</span>
+                {member.isYou && (
+                  <span className="bg-gradient-to-r from-pink-500 to-purple-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                    YOU
+                  </span>
+                )}
               </div>
             </div>
-          </div>
-        )}
+          ))}
+        </div>
       </div>
 
-      {/* Soundboard Panel (floats above action bar) */}
+      {/* Floating Soundboard Drawer */}
       <div className="relative">
         <SoundboardPanel
           isOpen={isSoundboardOpen}
@@ -400,92 +365,77 @@ export const VoiceArea: React.FC = () => {
           incomingSound={incomingSound}
         />
 
-        {/* Bottom Voice Action Bar (Discord Style) */}
-        <div className="h-20 bg-[#090A0D] border-t border-[#171920] px-6 flex items-center justify-center space-x-3 shrink-0 shadow-2xl">
-          {/* Mic Button */}
-          <button
-            onClick={toggleMute}
-            className={clsx(
-              "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-md cursor-pointer",
-              isMuted ? "bg-rose-600 hover:bg-rose-500 text-white" : "bg-[#171920] hover:bg-yellow-400 hover:text-black text-yellow-400 border border-yellow-400/30"
-            )}
-            title={isMuted ? "Unmute Mic" : "Mute Mic"}
-          >
-            {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
-          </button>
+        {/* Bottom Action Bar (Matching Screenshot Exactly) */}
+        <div className="h-22 bg-[#0E121B] border-t border-[#181D2A] px-8 flex items-center justify-between shrink-0 shadow-2xl">
+          {/* Left / Center Control Buttons */}
+          <div className="flex items-center space-x-3.5">
+            {/* 🔴 Mute / Unmute Button */}
+            <button
+              onClick={toggleMute}
+              className={clsx(
+                "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-md cursor-pointer border",
+                isMuted
+                  ? "bg-rose-600/20 border-rose-500/40 text-rose-400 hover:bg-rose-600 hover:text-white"
+                  : "bg-[#161B28] border-cyan-400/40 text-cyan-400 hover:bg-cyan-400 hover:text-black"
+              )}
+              title={isMuted ? "Unmute Mic" : "Mute Mic"}
+            >
+              {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+            </button>
 
-          {/* Video / Camera Button */}
-          <button
-            onClick={() => setIsCameraOn(!isCameraOn)}
-            className={clsx(
-              "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-md cursor-pointer",
-              isCameraOn ? "bg-yellow-400 text-black font-bold shadow-yellow-400/20" : "bg-[#171920] hover:bg-yellow-400 hover:text-black text-gray-300 border border-gray-800 hover:border-yellow-400"
-            )}
-            title={isCameraOn ? "Turn Off Camera" : "Turn On Camera"}
-          >
-            {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
-          </button>
+            {/* 🎧 Headphones / Deafen Button */}
+            <button
+              onClick={() => setIsDeafened(!isDeafened)}
+              className={clsx(
+                "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-md cursor-pointer border",
+                isDeafened
+                  ? "bg-rose-600/20 border-rose-500/40 text-rose-400 hover:bg-rose-600 hover:text-white"
+                  : "bg-[#161B28] border-white/10 text-gray-300 hover:border-cyan-400 hover:text-cyan-400"
+              )}
+              title={isDeafened ? "Undeafen" : "Deafen"}
+            >
+              {isDeafened ? <VolumeX size={20} /> : <Headphones size={20} />}
+            </button>
 
-          {/* Screen Share Button */}
-          <button
-            onClick={toggleScreenShare}
-            className={clsx(
-              "h-12 px-4 rounded-2xl flex items-center space-x-2 transition-all shadow-lg font-black text-xs cursor-pointer",
-              isScreenSharing 
-                ? "bg-yellow-400 text-black shadow-yellow-400/30" 
-                : "bg-[#171920] hover:bg-yellow-400 hover:text-black text-yellow-400 border border-yellow-400/30 hover:border-yellow-400"
-            )}
-            title="Share Your Screen"
-          >
-            <ScreenShare size={18} />
-            <span className="hidden sm:inline">{isScreenSharing ? 'STOP' : 'SHARE'}</span>
-          </button>
+            {/* 🎙️ Soundboard Button (Cyan Pill) */}
+            <button
+              onClick={() => setIsSoundboardOpen(prev => !prev)}
+              className={clsx(
+                "h-12 px-5 rounded-2xl flex items-center space-x-2 transition-all shadow-md font-extrabold text-xs cursor-pointer border",
+                isSoundboardOpen
+                  ? "bg-cyan-400 text-black border-cyan-300 shadow-cyan-400/30"
+                  : "bg-[#161B28] hover:bg-cyan-500/10 text-cyan-400 border-cyan-500/30 hover:border-cyan-400"
+              )}
+            >
+              <Radio size={16} className="animate-pulse" />
+              <span>Soundboard</span>
+            </button>
 
-          {/* 🎵 Soundboard Button */}
-          <button
-            onClick={() => setIsSoundboardOpen(prev => !prev)}
-            className={clsx(
-              "h-12 px-4 rounded-2xl flex items-center space-x-2 transition-all shadow-md font-black text-xs cursor-pointer relative",
-              isSoundboardOpen
-                ? "bg-yellow-400 text-black shadow-yellow-400/30"
-                : "bg-[#171920] hover:bg-yellow-400 hover:text-black text-yellow-400 border border-yellow-400/30 hover:border-yellow-400"
-            )}
-            title="Soundboard"
-          >
-            <Music2 size={18} />
-            <span className="hidden sm:inline">SOUNDS</span>
-            {/* Pulse indicator when open */}
-            {isSoundboardOpen && (
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-yellow-400 rounded-full border-2 border-[#090A0D] animate-pulse" />
-            )}
-          </button>
+            {/* 🔴 Disconnect / Leave Button */}
+            <button
+              onClick={handleDisconnect}
+              className="w-12 h-12 bg-rose-600/20 hover:bg-rose-600 border border-rose-500/40 text-rose-400 hover:text-white rounded-2xl flex items-center justify-center transition-all shadow-md cursor-pointer"
+              title="Disconnect from Voice"
+            >
+              <PhoneOff size={20} />
+            </button>
+          </div>
 
-          {/* 🌟 Nitro HD Streaming Quality Indicator */}
-          <button
-            onClick={() => {
-              if (!isNitro) setIsNitroModalOpen(true);
-              else setStreamQuality(prev => prev === '1080p' ? '720p' : '1080p');
-            }}
-            className={clsx(
-              "h-12 px-3 rounded-2xl flex items-center space-x-1.5 transition-all shadow-md font-black text-xs cursor-pointer border",
-              isNitro
-                ? "bg-yellow-400/10 text-yellow-400 border-yellow-400/30 hover:bg-yellow-400/20"
-                : "bg-[#171920] text-gray-400 border-gray-800 hover:text-yellow-400 hover:border-yellow-400"
-            )}
-            title={isNitro ? `Current Quality: ${streamQuality} 60FPS (Nitro Active)` : "Unlock 1080p 60FPS Streaming with Nitro"}
-          >
-            <Zap size={15} className={clsx(isNitro && "fill-yellow-400 text-yellow-400")} />
-            <span className="hidden md:inline">{isNitro ? `${streamQuality} 60FPS` : 'HD NITRO'}</span>
-          </button>
-
-          {/* Red Disconnect / End Call Button */}
-          <button
-            onClick={handleDisconnect}
-            className="w-12 h-12 bg-rose-600 hover:bg-rose-500 text-white rounded-2xl flex items-center justify-center transition-all shadow-lg shadow-rose-600/30 cursor-pointer"
-            title="Disconnect from Voice"
-          >
-            <PhoneOff size={20} />
-          </button>
+          {/* Right: Bright Share Screen Button */}
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={toggleScreenShare}
+              className={clsx(
+                "h-12 px-6 rounded-2xl flex items-center space-x-2.5 transition-all shadow-xl font-black text-xs tracking-wide cursor-pointer hover:scale-105 active:scale-95",
+                isScreenSharing
+                  ? "bg-rose-600 text-white shadow-rose-600/30"
+                  : "bg-gradient-to-r from-blue-600 via-cyan-500 to-pink-500 hover:from-blue-500 hover:via-cyan-400 hover:to-pink-400 text-white shadow-cyan-500/25"
+              )}
+            >
+              <ScreenShare size={18} />
+              <span>{isScreenSharing ? 'Stop Sharing' : 'Share Screen'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -497,3 +447,4 @@ export const VoiceArea: React.FC = () => {
   );
 };
 
+export default VoiceArea;
