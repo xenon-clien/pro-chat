@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   X, LogOut, Database, User as UserIcon, Shield, CheckCircle2, 
-  Upload, Sparkles, Image, Check, AlertCircle, Save, Camera, Zap, Rocket, Star, Palette
+  Upload, Sparkles, Image, Check, AlertCircle, Save, Camera, Zap, 
+  Rocket, Star, Palette, RefreshCw, Edit3
 } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNitroStore } from '../../store/useNitroStore';
@@ -15,25 +16,25 @@ interface UserSettingsModalProps {
 }
 
 const PRESET_AVATARS = [
-  { name: 'Cyber Bot', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=CyberBot' },
-  { name: 'Neon Gamer', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=NeonGamer' },
-  { name: 'Ninja', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ninja' },
+  { name: 'Pink Robot', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=PinkRobot&backgroundColor=f472b6' },
+  { name: 'Neon Cyber', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=CyberNeon&backgroundColor=38bdf8' },
+  { name: 'Electric Fox', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=ElectricFox&backgroundColor=818cf8' },
+  { name: 'Sakura Bot', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=SakuraBot&backgroundColor=fb7185' },
+  { name: 'Gold Bot', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=shivam&backgroundColor=fbbf24' },
   { name: 'Pixel Hero', url: 'https://api.dicebear.com/7.x/pixel-art/svg?seed=PixelHero' },
-  { name: 'Cyber Cat', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=CyberCat' },
-  { name: 'Hacker', url: 'https://api.dicebear.com/7.x/pixel-art/svg?seed=Hacker' },
   { name: 'Cosmic Wizard', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=CosmicWizard' },
-  { name: 'Gold Skull', url: 'https://api.dicebear.com/7.x/shapes/svg?seed=GoldSkull' },
+  { name: 'Cyber Cat', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=CyberCat&backgroundColor=2dd4bf' },
 ];
 
 const PRESET_BANNER_COLORS = [
-  '#FACC15', // Yellow
+  '#38BDF8', // Cyan
+  '#F472B6', // Pink
   '#A855F7', // Purple
-  '#3B82F6', // Blue
-  '#EC4899', // Pink
   '#10B981', // Emerald
-  '#F97316', // Orange
+  '#F59E0B', // Amber
   '#EF4444', // Red
-  '#1E293B', // Slate
+  '#6366F1', // Indigo
+  '#0F172A', // Deep Slate
 ];
 
 export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, onClose }) => {
@@ -41,10 +42,10 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
   const { isNitro, nitroTier, nitroExpiresAt, boostCredits, bannerColor: nitroBannerColor, bannerUrl: nitroBannerUrl, updateBanner } = useNitroStore();
   
   const [activeTab, setActiveTab] = useState<'EDIT_PROFILE' | 'NITRO' | 'ACCOUNT' | 'DATABASE'>('EDIT_PROFILE');
-  const [name, setName] = useState(user?.name || '');
-  const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
-  const [bannerColor, setBannerColor] = useState(nitroBannerColor || '#FACC15');
-  const [bannerUrl, setBannerUrl] = useState(nitroBannerUrl || '');
+  const [name, setName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [bannerColor, setBannerColor] = useState('#38BDF8');
+  const [bannerUrl, setBannerUrl] = useState('');
   const [isNitroModalOpen, setIsNitroModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -52,6 +53,16 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bannerFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync state with active user whenever modal opens or user updates
+  useEffect(() => {
+    if (user) {
+      setName(user.name || 'Pro Guest');
+      setAvatarUrl(user.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.name || 'guest'}&backgroundColor=fbbf24`);
+    }
+    if (nitroBannerColor) setBannerColor(nitroBannerColor);
+    if (nitroBannerUrl) setBannerUrl(nitroBannerUrl);
+  }, [user, nitroBannerColor, nitroBannerUrl, isOpen]);
 
   if (!isOpen) return null;
 
@@ -81,11 +92,6 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
 
   // Handle banner upload
   const handleBannerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!isNitro) {
-      setIsNitroModalOpen(true);
-      return;
-    }
-
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -95,6 +101,14 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
       setErrorMessage(null);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleGenerateRandomAvatar = () => {
+    const randomSeed = Math.random().toString(36).substring(2, 8);
+    const colors = ['38bdf8', 'f472b6', 'fbbf24', '818cf8', '2dd4bf'];
+    const randomBg = colors[Math.floor(Math.random() * colors.length)];
+    const generated = `https://api.dicebear.com/7.x/bottts/svg?seed=${randomSeed}&backgroundColor=${randomBg}`;
+    setAvatarUrl(generated);
   };
 
   // Handle Save Profile
@@ -118,8 +132,11 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
         bannerColor,
         bannerUrl: bannerUrl.trim() || undefined
       });
-      setSuccessMessage('Profile updated successfully!');
-      setTimeout(() => setSuccessMessage(null), 3000);
+      setSuccessMessage('Profile and Avatar updated successfully! 🎉');
+      setTimeout(() => {
+        setSuccessMessage(null);
+        onClose();
+      }, 1200);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to update profile');
     } finally {
@@ -129,33 +146,33 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in select-none">
         <div 
-          className="relative w-full max-w-3xl bg-[#121418] text-[#dbdee1] rounded-2xl shadow-2xl overflow-hidden border border-yellow-400/30 flex flex-col md:flex-row min-h-[520px] max-h-[90vh]"
+          className="relative w-full max-w-3xl bg-[#0E121B] text-[#dbdee1] rounded-3xl shadow-2xl overflow-hidden border border-cyan-500/30 flex flex-col md:flex-row min-h-[540px] max-h-[92vh]"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Left Settings Navigation Sidebar */}
-          <div className="w-full md:w-56 bg-[#090A0D] p-4 flex flex-col justify-between border-r border-[#1e222a] shrink-0">
+          <div className="w-full md:w-60 bg-[#0A0D14] p-5 flex flex-col justify-between border-r border-[#181D2A] shrink-0">
             <div>
-              <div className="text-xs font-black uppercase tracking-wider text-yellow-400/80 mb-3 px-2">
+              <div className="text-xs font-black uppercase tracking-wider text-cyan-400 mb-4 px-2">
                 User Settings
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <button 
                   onClick={() => setActiveTab('EDIT_PROFILE')}
                   className={clsx(
-                    "w-full flex items-center px-3 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer",
-                    activeTab === 'EDIT_PROFILE' ? "bg-yellow-400 text-black font-black shadow-sm" : "text-gray-400 hover:bg-[#161820] hover:text-yellow-400"
+                    "w-full flex items-center px-3.5 py-2.5 rounded-2xl text-xs font-black transition-all cursor-pointer",
+                    activeTab === 'EDIT_PROFILE' ? "bg-cyan-400 text-black shadow-lg shadow-cyan-400/20" : "text-gray-400 hover:bg-[#111522] hover:text-white"
                   )}
                 >
-                  <Camera size={16} className="mr-2" />
-                  Profiles & Banner
+                  <Edit3 size={16} className="mr-2" />
+                  Edit Profile & PFP
                 </button>
                 <button 
                   onClick={() => setActiveTab('NITRO')}
                   className={clsx(
-                    "w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer",
-                    activeTab === 'NITRO' ? "bg-yellow-400 text-black font-black shadow-sm" : "text-gray-400 hover:bg-[#161820] hover:text-yellow-400"
+                    "w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-black transition-all cursor-pointer",
+                    activeTab === 'NITRO' ? "bg-pink-500 text-white shadow-lg shadow-pink-500/20" : "text-gray-400 hover:bg-[#111522] hover:text-white"
                   )}
                 >
                   <div className="flex items-center">
@@ -163,16 +180,16 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                     Nitro & Boosts
                   </div>
                   {isNitro ? (
-                    <span className="text-[10px] bg-yellow-400 text-black font-black px-1.5 py-0.5 rounded-full">ACTIVE</span>
+                    <span className="text-[10px] bg-white text-pink-600 font-black px-2 py-0.5 rounded-full">ACTIVE</span>
                   ) : (
-                    <span className="text-[10px] bg-yellow-400/20 text-yellow-400 font-black px-1.5 py-0.5 rounded-full">UPGRADE</span>
+                    <span className="text-[10px] bg-pink-500/20 text-pink-400 font-black px-2 py-0.5 rounded-full">UPGRADE</span>
                   )}
                 </button>
                 <button 
                   onClick={() => setActiveTab('ACCOUNT')}
                   className={clsx(
-                    "w-full flex items-center px-3 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer",
-                    activeTab === 'ACCOUNT' ? "bg-yellow-400 text-black font-black shadow-sm" : "text-gray-400 hover:bg-[#161820] hover:text-yellow-400"
+                    "w-full flex items-center px-3.5 py-2.5 rounded-2xl text-xs font-black transition-all cursor-pointer",
+                    activeTab === 'ACCOUNT' ? "bg-cyan-400 text-black shadow-lg shadow-cyan-400/20" : "text-gray-400 hover:bg-[#111522] hover:text-white"
                   )}
                 >
                   <UserIcon size={16} className="mr-2" />
@@ -181,19 +198,19 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                 <button 
                   onClick={() => setActiveTab('DATABASE')}
                   className={clsx(
-                    "w-full flex items-center px-3 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer",
-                    activeTab === 'DATABASE' ? "bg-yellow-400 text-black font-black shadow-sm" : "text-gray-400 hover:bg-[#161820] hover:text-yellow-400"
+                    "w-full flex items-center px-3.5 py-2.5 rounded-2xl text-xs font-black transition-all cursor-pointer",
+                    activeTab === 'DATABASE' ? "bg-cyan-400 text-black shadow-lg shadow-cyan-400/20" : "text-gray-400 hover:bg-[#111522] hover:text-white"
                   )}
                 >
                   <Database size={16} className="mr-2" />
-                  Database
+                  Cloud Sync
                 </button>
               </div>
             </div>
 
             <button
               onClick={handleLogout}
-              className="flex items-center px-3 py-2 rounded-xl text-rose-400 hover:bg-rose-500/10 text-sm font-bold transition-colors mt-6 cursor-pointer"
+              className="flex items-center px-3.5 py-2.5 rounded-2xl text-rose-400 hover:bg-rose-500/10 text-xs font-bold transition-colors mt-6 cursor-pointer"
             >
               <LogOut size={16} className="mr-2" />
               Log Out
@@ -201,10 +218,10 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
           </div>
 
           {/* Right Settings Content */}
-          <div className="flex-1 p-6 relative bg-[#121418] overflow-y-auto custom-scrollbar">
+          <div className="flex-1 p-6 relative bg-[#0E121B] overflow-y-auto custom-scrollbar">
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 text-gray-400 hover:text-yellow-400 transition-colors p-1.5 rounded-full hover:bg-[#1f222b] cursor-pointer"
+              className="absolute top-4 right-4 text-gray-400 hover:text-cyan-400 transition-colors p-1.5 rounded-full hover:bg-white/5 cursor-pointer z-10"
             >
               <X size={20} />
             </button>
@@ -212,25 +229,25 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
             {/* TAB 1: EDIT PROFILE & BANNER */}
             {activeTab === 'EDIT_PROFILE' && (
               <div>
-                <h2 className="text-xl font-black text-white mb-1 tracking-tight">Customize Profile</h2>
-                <p className="text-xs text-gray-400 mb-4 font-medium">Personalize your avatar, banner image, and display name.</p>
+                <h2 className="text-2xl font-black text-white mb-1 tracking-tight">Edit Profile & Avatar</h2>
+                <p className="text-xs text-gray-400 mb-4 font-medium">Update your username, profile picture, and custom banner theme.</p>
 
                 {successMessage && (
-                  <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-xl flex items-center">
+                  <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-2xl flex items-center">
                     <CheckCircle2 size={16} className="mr-2 shrink-0" />
                     <span>{successMessage}</span>
                   </div>
                 )}
 
                 {errorMessage && (
-                  <div className="mb-4 p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold rounded-xl flex items-center">
+                  <div className="mb-4 p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold rounded-2xl flex items-center">
                     <AlertCircle size={16} className="mr-2 shrink-0" />
                     <span>{errorMessage}</span>
                   </div>
                 )}
 
                 {/* Profile Card Preview with Banner & Avatar */}
-                <div className="mb-6 rounded-2xl overflow-hidden border border-[#1e222a] bg-[#090A0D] shadow-xl">
+                <div className="mb-5 rounded-3xl overflow-hidden border border-[#181D2A] bg-[#0A0D14] shadow-xl">
                   {/* Banner */}
                   <div 
                     className="h-24 w-full relative group transition-all"
@@ -242,17 +259,11 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                     }}
                   >
                     <div 
-                      onClick={() => {
-                        if (!isNitro) {
-                          setIsNitroModalOpen(true);
-                        } else {
-                          bannerFileInputRef.current?.click();
-                        }
-                      }}
-                      className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-yellow-300 font-black text-xs cursor-pointer transition-opacity backdrop-blur-xs"
+                      onClick={() => bannerFileInputRef.current?.click()}
+                      className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-cyan-300 font-black text-xs cursor-pointer transition-opacity backdrop-blur-xs"
                     >
                       <Sparkles size={14} className="mr-1.5" />
-                      {isNitro ? 'Change Banner' : 'Unlock Nitro Banner'}
+                      Change Banner
                     </div>
                   </div>
 
@@ -260,62 +271,100 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                   <div className="p-4 pt-0 relative flex items-end justify-between -mt-10">
                     <div className="flex items-end space-x-3">
                       <div className="relative group">
-                        {avatarUrl ? (
-                          <img 
-                            src={avatarUrl} 
-                            alt="Avatar Preview" 
-                            className="w-16 h-16 rounded-2xl object-cover border-4 border-[#090A0D] shadow-xl bg-black"
-                          />
-                        ) : (
-                          <div className="w-16 h-16 rounded-2xl bg-yellow-400 text-black flex items-center justify-center font-black text-2xl shadow-xl border-4 border-[#090A0D]">
-                            {name ? name.substring(0, 2).toUpperCase() : 'GU'}
-                          </div>
-                        )}
+                        <img 
+                          src={avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${name || 'guest'}&backgroundColor=fbbf24`} 
+                          alt="Avatar Preview" 
+                          className="w-18 h-18 rounded-3xl object-contain border-4 border-[#0A0D14] shadow-2xl bg-[#0E121B]"
+                        />
                         <div 
                           onClick={() => fileInputRef.current?.click()}
-                          className="absolute inset-0 bg-black/60 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-yellow-400"
+                          className="absolute inset-0 bg-black/60 rounded-3xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-cyan-400"
+                          title="Upload Custom PFP"
                         >
-                          <Camera size={16} />
+                          <Camera size={18} />
                         </div>
                       </div>
                       <div className="pb-1">
-                        <div className="text-white font-extrabold text-base flex items-center gap-1.5">
-                          {name || 'Guest User'}
+                        <div className="text-white font-black text-base flex items-center gap-1.5">
+                          {name || 'Pro Guest'}
                           {isNitro && <NitroBadge tier={nitroTier} size="sm" />}
                         </div>
-                        <p className="text-[11px] text-gray-500">#{user?.id ? user.id.substring(0, 4) : '0001'}</p>
+                        <p className="text-[11px] text-cyan-400 font-mono font-bold">@{name.toLowerCase().replace(/\s+/g, '_') || 'guest'}</p>
                       </div>
                     </div>
 
-                    {!isNitro && (
-                      <button
-                        type="button"
-                        onClick={() => setIsNitroModalOpen(true)}
-                        className="bg-yellow-400 hover:bg-yellow-300 text-black font-black text-xs px-3 py-1.5 rounded-xl transition-transform hover:scale-105 shadow-md flex items-center gap-1 mb-1"
-                      >
-                        <Zap size={12} className="fill-black" />
-                        Get Nitro
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={handleGenerateRandomAvatar}
+                      className="bg-[#111522] hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-bold px-3 py-1.5 rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw size={12} />
+                      Randomize PFP
+                    </button>
                   </div>
                 </div>
 
                 <form onSubmit={handleSaveProfile} className="space-y-4">
-                  {/* Banner Controls */}
-                  <div className="bg-[#090A0D] p-3.5 rounded-2xl border border-[#1e222a] space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-black uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
-                        <Palette size={14} />
-                        Profile Banner Theme
+                  {/* Name Input */}
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-wider text-cyan-400 mb-1.5">
+                      Display Name / Username
+                    </label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      maxLength={32}
+                      placeholder="Enter your name (e.g. shivam, Alex)..."
+                      className="w-full bg-[#07090E] text-white px-4 py-3 rounded-2xl border border-gray-800 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 outline-none text-sm font-bold transition-all"
+                    />
+                  </div>
+
+                  {/* Preset Avatars Gallery */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-black uppercase tracking-wider text-pink-400">
+                        Choose Character Avatar
                       </label>
-                      {!isNitro && (
-                        <span className="text-[10px] text-yellow-400/80 font-bold bg-yellow-400/10 px-2 py-0.5 rounded-full border border-yellow-400/20">
-                          Nitro Perk
-                        </span>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-[11px] text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Upload size={12} />
+                        Upload Custom Photo
+                      </button>
                     </div>
 
-                    {/* Color Swatches */}
+                    <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 bg-[#07090E] p-3 rounded-2xl border border-gray-800">
+                      {PRESET_AVATARS.map((preset) => (
+                        <button
+                          key={preset.name}
+                          type="button"
+                          onClick={() => setAvatarUrl(preset.url)}
+                          className={clsx(
+                            "w-11 h-11 rounded-2xl overflow-hidden border-2 transition-all p-1 bg-[#0E121B] hover:scale-105 cursor-pointer relative",
+                            avatarUrl === preset.url ? "border-cyan-400 ring-2 ring-cyan-400/30 bg-cyan-400/10" : "border-gray-800 hover:border-gray-600"
+                          )}
+                          title={preset.name}
+                        >
+                          <img src={preset.url} alt={preset.name} className="w-full h-full object-contain" />
+                          {avatarUrl === preset.url && (
+                            <div className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-cyan-400 rounded-full flex items-center justify-center text-black">
+                              <Check size={9} strokeWidth={3} />
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Banner Theme Color */}
+                  <div className="bg-[#07090E] p-3.5 rounded-2xl border border-gray-800 space-y-2.5">
+                    <label className="text-xs font-black uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+                      <Palette size={14} />
+                      Profile Banner Color Theme
+                    </label>
                     <div className="flex items-center gap-2 flex-wrap">
                       {PRESET_BANNER_COLORS.map((c) => (
                         <button
@@ -323,7 +372,7 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                           type="button"
                           onClick={() => setBannerColor(c)}
                           className={clsx(
-                            "w-7 h-7 rounded-lg transition-transform hover:scale-110 relative border-2",
+                            "w-7 h-7 rounded-xl transition-transform hover:scale-110 relative border-2",
                             bannerColor === c ? "border-white scale-110 shadow-md" : "border-transparent"
                           )}
                           style={{ backgroundColor: c }}
@@ -337,97 +386,13 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                         type="color" 
                         value={bannerColor} 
                         onChange={(e) => setBannerColor(e.target.value)}
-                        className="w-7 h-7 rounded-lg cursor-pointer bg-transparent border-0"
+                        className="w-7 h-7 rounded-xl cursor-pointer bg-transparent border-0"
                         title="Custom Color"
                       />
                     </div>
-
-                    {/* Banner Image URL */}
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={bannerUrl}
-                        onChange={(e) => setBannerUrl(e.target.value)}
-                        placeholder="Banner Image / GIF URL (e.g. https://...)"
-                        className="flex-1 bg-[#121418] text-white px-3 py-2 rounded-xl border border-gray-800 focus:border-yellow-400 outline-none text-xs font-semibold"
-                      />
-                      <input 
-                        type="file" 
-                        ref={bannerFileInputRef} 
-                        onChange={handleBannerFileChange} 
-                        accept="image/*" 
-                        className="hidden" 
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!isNitro) setIsNitroModalOpen(true);
-                          else bannerFileInputRef.current?.click();
-                        }}
-                        className="bg-[#171920] hover:bg-yellow-400 hover:text-black text-gray-300 px-3 py-2 rounded-xl text-xs font-bold transition-colors shrink-0 flex items-center gap-1 border border-gray-800"
-                      >
-                        <Upload size={13} />
-                        Upload
-                      </button>
-                    </div>
                   </div>
 
-                  {/* Preset Avatars Gallery */}
-                  <div>
-                    <label className="block text-xs font-black uppercase tracking-wider text-yellow-400 mb-2">
-                      Choose Preset Avatar
-                    </label>
-                    <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 bg-[#090A0D] p-3 rounded-2xl border border-[#1e222a]">
-                      {PRESET_AVATARS.map((preset) => (
-                        <button
-                          key={preset.name}
-                          type="button"
-                          onClick={() => setAvatarUrl(preset.url)}
-                          className={clsx(
-                            "w-11 h-11 rounded-xl overflow-hidden border-2 transition-all p-1 bg-[#121418] hover:scale-105 cursor-pointer relative",
-                            avatarUrl === preset.url ? "border-yellow-400 ring-2 ring-yellow-400/30 bg-yellow-400/10" : "border-gray-800 hover:border-gray-600"
-                          )}
-                          title={preset.name}
-                        >
-                          <img src={preset.url} alt={preset.name} className="w-full h-full object-contain" />
-                          {avatarUrl === preset.url && (
-                            <div className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-yellow-400 rounded-full flex items-center justify-center text-black">
-                              <Check size={9} strokeWidth={3} />
-                            </div>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Direct Avatar inputs */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-black uppercase tracking-wider text-yellow-400 mb-1">
-                        Avatar URL or GIF
-                      </label>
-                      <input
-                        type="url"
-                        value={avatarUrl}
-                        onChange={(e) => setAvatarUrl(e.target.value)}
-                        placeholder="https://example.com/avatar.gif"
-                        className="w-full bg-[#090A0D] text-white px-3 py-2 rounded-xl border border-gray-800 focus:border-yellow-400 outline-none text-xs font-semibold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-black uppercase tracking-wider text-yellow-400 mb-1">
-                        Display Name
-                      </label>
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        maxLength={32}
-                        className="w-full bg-[#090A0D] text-white px-3 py-2 rounded-xl border border-gray-800 focus:border-yellow-400 outline-none text-xs font-bold"
-                      />
-                    </div>
-                  </div>
-
+                  {/* Hidden File Inputs */}
                   <input 
                     type="file" 
                     ref={fileInputRef} 
@@ -435,16 +400,23 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                     accept="image/*" 
                     className="hidden" 
                   />
+                  <input 
+                    type="file" 
+                    ref={bannerFileInputRef} 
+                    onChange={handleBannerFileChange} 
+                    accept="image/*" 
+                    className="hidden" 
+                  />
 
-                  {/* Save Button */}
+                  {/* Save Changes Button */}
                   <div className="pt-2 flex justify-end">
                     <button
                       type="submit"
                       disabled={isLoading}
-                      className="bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-black text-sm font-black px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-yellow-400/20 flex items-center cursor-pointer disabled:opacity-50"
+                      className="bg-gradient-to-r from-cyan-400 via-blue-500 to-pink-500 hover:from-cyan-300 hover:via-blue-400 hover:to-pink-400 text-black text-xs font-black px-8 py-3 rounded-2xl transition-all shadow-xl shadow-cyan-500/20 flex items-center cursor-pointer disabled:opacity-50 hover:scale-105 active:scale-95"
                     >
-                      <Save size={16} className="mr-2" />
-                      {isLoading ? 'Saving...' : 'Save Changes'}
+                      <Save size={15} className="mr-2" />
+                      {isLoading ? 'Saving...' : 'Save Profile Changes 🚀'}
                     </button>
                   </div>
                 </form>
@@ -456,30 +428,29 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
-                      <Zap size={22} className="text-yellow-400 fill-yellow-400" />
+                    <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                      <Zap size={24} className="text-pink-400 fill-pink-400" />
                       ProChat Nitro
                     </h2>
                     <p className="text-xs text-gray-400 font-medium">Elevate your Discord-like experience with premium features.</p>
                   </div>
                   <button
                     onClick={() => setIsNitroModalOpen(true)}
-                    className="bg-yellow-400 hover:bg-yellow-300 text-black font-black text-xs px-4 py-2 rounded-xl transition-all shadow-lg shadow-yellow-400/20 flex items-center gap-1.5"
+                    className="bg-pink-500 hover:bg-pink-400 text-white font-black text-xs px-4 py-2 rounded-2xl transition-all shadow-lg shadow-pink-500/20 flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Star size={14} className="fill-black" />
+                    <Star size={14} className="fill-white" />
                     {isNitro ? 'Manage Subscription' : 'Subscribe Now'}
                   </button>
                 </div>
 
-                {/* Current Status Box */}
-                <div className="bg-[#090A0D] rounded-2xl p-4 border border-[#1e222a] mb-5">
-                  <div className="flex items-center justify-between pb-3 border-b border-[#1e222a]">
+                <div className="bg-[#0A0D14] rounded-3xl p-4 border border-[#181D2A] mb-5">
+                  <div className="flex items-center justify-between pb-3 border-b border-[#181D2A]">
                     <div>
                       <div className="text-xs text-gray-500 font-bold uppercase tracking-wider">Subscription Status</div>
                       <div className="text-white font-black text-base mt-0.5 flex items-center gap-2">
                         {isNitro ? (
                           <>
-                            <span className="text-yellow-400">ProChat {nitroTier === 'classic' ? 'Nitro Classic' : 'Nitro'}</span>
+                            <span className="text-pink-400">ProChat {nitroTier === 'classic' ? 'Nitro Classic' : 'Nitro'}</span>
                             <NitroBadge tier={nitroTier} size="md" showLabel />
                           </>
                         ) : (
@@ -487,55 +458,18 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                         )}
                       </div>
                     </div>
-                    {isNitro && nitroExpiresAt && (
-                      <div className="text-right">
-                        <div className="text-[10px] text-gray-500 font-bold uppercase">Renews On</div>
-                        <div className="text-xs text-gray-300 font-medium">{new Date(nitroExpiresAt).toLocaleDateString()}</div>
-                      </div>
-                    )}
                   </div>
 
-                  {/* Boost inventory */}
                   <div className="pt-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Rocket size={18} className="text-yellow-400" />
+                      <Rocket size={18} className="text-pink-400" />
                       <div>
                         <div className="text-white font-bold text-xs">Available Server Boosts</div>
-                        <div className="text-[11px] text-gray-500">Boost your favorite servers to unlock higher quality perks</div>
+                        <div className="text-[11px] text-gray-500">Boost your favorite servers to unlock HD streaming</div>
                       </div>
                     </div>
-                    <span className="text-yellow-400 font-black text-lg">{boostCredits}</span>
+                    <span className="text-pink-400 font-black text-lg">{boostCredits}</span>
                   </div>
-                </div>
-
-                {/* Nitro Perks Grid */}
-                <h3 className="text-xs font-black uppercase tracking-wider text-yellow-400 mb-3">Your Nitro Privileges</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { title: 'Animated GIF Avatars', desc: 'Use dynamic avatars anywhere', unlocked: isNitro },
-                    { title: 'Custom Profile Banners', desc: 'Custom header colors and images', unlocked: isNitro },
-                    { title: 'HD 1080p 60FPS Streaming', desc: 'Ultra-crisp screen sharing & video', unlocked: isNitro && nitroTier === 'nitro' },
-                    { title: '500MB File Uploads', desc: 'Send large high-res media', unlocked: isNitro },
-                    { title: 'Global Custom Emojis', desc: 'Use emojis across all servers', unlocked: isNitro },
-                    { title: 'Custom Soundboard Slots', desc: 'Unlimited custom sound uploads', unlocked: isNitro },
-                  ].map((perk, i) => (
-                    <div key={i} className={clsx(
-                      "p-3 rounded-xl border text-xs",
-                      perk.unlocked 
-                        ? "bg-yellow-400/5 border-yellow-400/30 text-white" 
-                        : "bg-[#090A0D] border-[#1e222a] text-gray-400"
-                    )}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-black text-white">{perk.title}</span>
-                        {perk.unlocked ? (
-                          <Check size={14} className="text-yellow-400" />
-                        ) : (
-                          <span className="text-[9px] bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded font-bold">LOCKED</span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-gray-500">{perk.desc}</p>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
@@ -543,70 +477,34 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
             {/* TAB 3: MY ACCOUNT */}
             {activeTab === 'ACCOUNT' && (
               <div>
-                <h2 className="text-xl font-black text-white mb-6 tracking-tight">My Account</h2>
-
-                <div className="bg-[#090A0D] rounded-2xl p-4 border border-[#1e222a] mb-6 shadow-inner">
+                <h2 className="text-2xl font-black text-white mb-4 tracking-tight">My Account</h2>
+                <div className="bg-[#0A0D14] rounded-3xl p-4 border border-[#181D2A] mb-4">
                   <div className="flex items-center space-x-4 mb-4">
-                    {user?.avatarUrl ? (
-                      <img 
-                        src={user.avatarUrl} 
-                        alt="User Avatar" 
-                        className="w-16 h-16 rounded-2xl object-cover border-2 border-yellow-400 shadow-xl bg-black"
-                      />
-                    ) : (
-                      <div className="w-16 h-16 rounded-2xl bg-yellow-400 text-black flex items-center justify-center font-black text-2xl shadow-xl border-2 border-yellow-300">
-                        {user?.name?.substring(0, 2).toUpperCase() || 'GU'}
-                      </div>
-                    )}
+                    <img 
+                      src={user?.avatarUrl || 'https://api.dicebear.com/7.x/bottts/svg?seed=shivam&backgroundColor=fbbf24'} 
+                      alt="User Avatar" 
+                      className="w-16 h-16 rounded-2xl object-cover border-2 border-cyan-400 shadow-xl bg-black"
+                    />
                     <div>
                       <h3 className="text-white font-extrabold text-lg flex items-center gap-1.5">
                         {user?.name}
                         {isNitro && <NitroBadge tier={nitroTier} size="md" />}
                       </h3>
-                      <p className="text-xs text-gray-500 font-medium">{user?.email || 'guest@prochat.io'}</p>
-                      <div className="inline-flex items-center space-x-1 mt-1.5 px-2.5 py-0.5 bg-yellow-400/10 border border-yellow-400/30 text-yellow-400 text-[11px] font-bold rounded-full">
-                        <CheckCircle2 size={12} />
-                        <span>Online / Active</span>
-                      </div>
+                      <p className="text-xs text-gray-500 font-medium">{user?.email || 'user@prochat.io'}</p>
                     </div>
                   </div>
-
-                  <div className="bg-[#121418] rounded-xl p-3 space-y-2 text-xs border border-gray-800/80">
-                    <div className="flex justify-between py-1 border-b border-gray-800">
-                      <span className="text-gray-400">User ID</span>
-                      <span className="text-gray-200 font-mono font-medium">{user?.id || '—'}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-gray-800">
-                      <span className="text-gray-400">Nitro Status</span>
-                      <span className="text-yellow-400 font-bold flex items-center gap-1">
-                        {isNitro ? `Active (${nitroTier?.toUpperCase()})` : 'None'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between py-1">
-                      <span className="text-gray-400">Authentication</span>
-                      <span className="text-gray-200 font-medium">JWT Session</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-xs text-gray-500 font-medium">
-                  ProChat v2.5 • Nitro Engine • Supabase PostgreSQL • React + Vite
                 </div>
               </div>
             )}
 
-            {/* TAB 4: DATABASE */}
+            {/* TAB 4: CLOUD SYNC */}
             {activeTab === 'DATABASE' && (
               <div>
-                <h2 className="text-xl font-black text-white mb-4 tracking-tight">Database Architecture</h2>
-                <div className="bg-[#090A0D] p-4 rounded-2xl border border-[#1e222a] space-y-3 text-xs">
-                  <div className="flex items-center text-yellow-400 font-bold text-sm">
-                    <Database size={16} className="mr-2" />
-                    Supabase Cloud PostgreSQL
-                  </div>
-                  <p className="text-gray-400">Connected to remote managed Supabase database with Nitro & Server Boost tables.</p>
-                  <div className="bg-[#121418] p-3 rounded-xl border border-gray-800 font-mono text-[11px] text-gray-300">
-                    Status: 🟢 Connected & Synchronized (Prisma ORM)
+                <h2 className="text-2xl font-black text-white mb-4 tracking-tight">Real-Time Cloud Sync</h2>
+                <div className="bg-[#0A0D14] p-4 rounded-3xl border border-[#181D2A] space-y-3 text-xs">
+                  <p className="text-gray-400">Global MQTT WebSockets & Supabase Cloud Storage are connected and active.</p>
+                  <div className="bg-[#07090E] p-3 rounded-2xl border border-gray-800 font-mono text-[11px] text-emerald-400">
+                    Status: 🟢 Connected (Cross-Device Internet Relay Active)
                   </div>
                 </div>
               </div>
@@ -623,3 +521,4 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
   );
 };
 
+export default UserSettingsModal;

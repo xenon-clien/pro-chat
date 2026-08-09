@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Hash, Volume2, ChevronDown, ChevronUp, Settings, Mic, MicOff, 
   Headphones, VolumeX, Plus, UserPlus, Shield, Crown, Zap, 
-  Users, MessageSquare, ScreenShare, LogOut, Sparkles, Check
+  Users, MessageSquare, ScreenShare, LogOut, Sparkles, Check, Edit
 } from 'lucide-react';
 import { useServerStore } from '../../store/useServerStore';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -265,6 +265,18 @@ export const ChannelSidebar: React.FC = () => {
 
               <div className="h-[1px] bg-white/5 my-1" />
 
+              {/* Edit Profile & PFP */}
+              <div 
+                onClick={() => {
+                  setIsStatusMenuOpen(false);
+                  setIsSettingsModalOpen(true);
+                }}
+                className="flex items-center space-x-2.5 p-1.5 rounded-xl hover:bg-cyan-500/10 cursor-pointer text-cyan-400 font-extrabold transition-colors"
+              >
+                <Edit size={14} />
+                <span>Edit Profile & PFP</span>
+              </div>
+
               {/* Log Out */}
               <div 
                 onClick={logout}
@@ -281,15 +293,15 @@ export const ChannelSidebar: React.FC = () => {
         <div className="h-16 bg-[#0E121B] border-t border-[#181D2A] px-3 flex items-center justify-between shrink-0">
           {/* User Avatar + Name + Status Toggle */}
           <div 
-            onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
-            className="flex items-center space-x-2 hover:bg-[#161B28] p-1.5 rounded-xl cursor-pointer transition-colors max-w-[110px]"
-            title="Toggle Status Menu"
+            onClick={() => setIsSettingsModalOpen(true)}
+            className="flex items-center space-x-2 hover:bg-[#161B28] p-1.5 rounded-xl cursor-pointer transition-colors max-w-[125px] group"
+            title="Click to Edit Profile & PFP"
           >
             <div className="relative shrink-0">
               <img 
                 src={user?.avatarUrl || 'https://api.dicebear.com/7.x/bottts/svg?seed=shivam&backgroundColor=fbbf24'} 
                 alt="Avatar" 
-                className="w-8 h-8 rounded-full object-cover border border-cyan-400/50"
+                className="w-8 h-8 rounded-full object-cover border border-cyan-400/50 group-hover:ring-2 group-hover:ring-cyan-400 transition-all"
               />
               <span className={clsx(
                 "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#0E121B]",
@@ -300,11 +312,11 @@ export const ChannelSidebar: React.FC = () => {
               )} />
             </div>
             <div className="truncate">
-              <div className="text-white text-xs font-black truncate">{user?.name || 'shivam'}</div>
-              <div className="text-gray-400 text-[10px] leading-tight truncate">@{user?.name?.toLowerCase() || 'shivam'}</div>
+              <div className="text-white text-xs font-black truncate group-hover:text-cyan-300 transition-colors">{user?.name || 'shivam'}</div>
+              <div className="text-gray-400 text-[10px] leading-tight truncate">@{user?.name?.toLowerCase().replace(/\s+/g, '_') || 'shivam'}</div>
             </div>
-            <ChevronUp size={14} className={clsx("text-gray-400 transition-transform", !isStatusMenuOpen && "rotate-180")} />
           </div>
+
 
           {/* Quick Action Icons: ScreenShare, Mic, Deafen, Settings */}
           <div className="flex items-center space-x-0.5 text-gray-400">
