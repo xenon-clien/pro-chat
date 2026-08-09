@@ -1,7 +1,12 @@
 import { create } from 'zustand';
 import api from '../lib/api';
 import cloudRelay from '../lib/cloudRelay';
-import { useServerStore } from './useServerStore';
+
+// ── Global server invite code getter (injected externally to avoid circular import) ──
+let _getActiveServerInviteCode: (() => string | null) = () => null;
+export function registerServerCodeGetter(fn: () => string | null) {
+  _getActiveServerInviteCode = fn;
+}
 
 export interface Message {
   id: string;
@@ -25,24 +30,22 @@ interface MessageState {
   sendMessage: (channelId: string, content: string) => Promise<void>;
 }
 
-// Initial seed messages
 const SEED_MESSAGES: Record<string, Message[]> = {
   'ch-general': [
     {
-      id: 'msg-1',
-      content: 'Welcome to ProChat! 🚀 Global real-time messaging is active. Send your invite code to friends and chat instantly!',
+      id: 'msg-seed-1',
+      content: '🚀 ProChat is live! Send your server invite code to friends and start chatting in real time!',
       createdAt: new Date(Date.now() - 3600000).toISOString(),
       author: {
         id: 'bot-admin',
         name: 'ProChat System',
         avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=ProChatBot',
       },
-      channelId: 'ch-general'
+      channelId: 'ch-general',
     },
-  ]
+  ],
 };
 
-// Play audio notification chime
 const playNotificationChime = () => {
   try {
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -51,30 +54,26 @@ const playNotificationChime = () => {
     osc.type = 'sine';
     osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15);
-    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
     osc.connect(gain);
     gain.connect(audioCtx.destination);
     osc.start();
-    osc.stop(audioCtx.currentTime + 0.2);
+    osc.stop(audioCtx.currentTime + 0.25);
   } catch (e) {}
 };
 
 /**
- * Returns a globally-shared MQTT topic based on the server's inviteCode.
- * This ensures User A (creator) and User B (joiner) always share the SAME topic,
- * regardless of their local channelId.
+ * Returns a globally-shared MQTT topic so all users in same server share messages.
+ * Uses inviteCode (injected from useServerStore) as the key — same for creator and joiner.
  */
 function getSharedTopic(channelId: string): string {
-  try {
-    const { servers, activeServerId } = useServerStore.getState();
-    const activeServer = servers.find(s => s.id === activeServerId);
-    if (activeServer?.inviteCode) {
-      const channelType = channelId.toLowerCase().includes('voice') ? 'voice' : 'text';
-      return `prochat/v1/server/${activeServer.inviteCode.toUpperCase()}/${channelType}`;
-    }
-  } catch (e) {}
-  return `prochat/v1/channel/${channelId}`;
+  const inviteCode = _getActiveServerInviteCode();
+  if (inviteCode) {
+    const channelType = channelId.toLowerCase().includes('voice') ? 'voice' : 'text';
+    return `prochat/v1/s/${inviteCode.toUpperCase().replace(/[^A-Z0-9]/g, '-')}/${channelType}`;
+  }
+  return `prochat/v1/ch/${channelId}`;
 }
 
 let currentUnsub: (() => void) | null = null;
@@ -89,16 +88,15 @@ export const useMessageStore = create<MessageState>((set, get) => {
     fetchMessages: async (channelId: string) => {
       set({ isLoading: true, error: null, activeChannelId: channelId });
 
-      // Unsubscribe from previous channel
       if (currentUnsub) {
         currentUnsub();
         currentUnsub = null;
       }
 
-      // Subscribe to the shared invite-code-based MQTT topic
       const topic = getSharedTopic(channelId);
-      currentUnsub = cloudRelay.subscribe(topic, (_, data) => {
-        if (data && data.id) {
+
+      currentUnsub = cloudRelay.subscribe(topic, (_, data: Message) => {
+        if (data?.id) {
           const current = get().messages;
           if (!current.find((m) => m.id === data.id)) {
             set({ messages: [...current, data] });
@@ -107,15 +105,12 @@ export const useMessageStore = create<MessageState>((set, get) => {
         }
       });
 
-      // Load persistent messages from localStorage using shared topic key
-      const storedKey = `prochat_msgs_${topic.replace(/\//g, '_')}`;
+      const storageKey = `prochat_msgs_${topic.replace(/\//g, '_')}`;
       let localSaved: Message[] = [];
       try {
-        const raw = localStorage.getItem(storedKey);
+        const raw = localStorage.getItem(storageKey);
         if (raw) localSaved = JSON.parse(raw);
-      } catch (e) {
-        localSaved = [];
-      }
+      } catch (e) {}
 
       try {
         const response = await api.get(`/messages/${channelId}`);
@@ -123,14 +118,10 @@ export const useMessageStore = create<MessageState>((set, get) => {
           set({ messages: response.data, isLoading: false });
           return;
         }
-      } catch (err: any) {
-        // Backend offline — use local fallback
-      }
+      } catch (err: any) {}
 
-      const seedForChannel = SEED_MESSAGES[channelId] || [];
-      const combined = [...localSaved, ...seedForChannel];
-
-      // Deduplicate by ID
+      const seeds = SEED_MESSAGES[channelId] || [];
+      const combined = [...localSaved, ...seeds];
       const uniqueMap = new Map<string, Message>();
       combined.forEach((m) => uniqueMap.set(m.id, m));
 
@@ -139,16 +130,15 @@ export const useMessageStore = create<MessageState>((set, get) => {
 
     addMessage: (message: Message) => {
       const current = get().messages;
-      if (!current.find(m => m.id === message.id)) {
+      if (!current.find((m) => m.id === message.id)) {
         set({ messages: [...current, message] });
-
-        // Persist with shared topic key
         try {
           const topic = getSharedTopic(message.channelId);
-          const storedKey = `prochat_msgs_${topic.replace(/\//g, '_')}`;
-          const saved = JSON.parse(localStorage.getItem(storedKey) || '[]');
-          if (!saved.find((m: Message) => m.id === message.id)) {
-            localStorage.setItem(storedKey, JSON.stringify([...saved, message]));
+          const storageKey = `prochat_msgs_${topic.replace(/\//g, '_')}`;
+          const saved: Message[] = JSON.parse(localStorage.getItem(storageKey) || '[]');
+          if (!saved.find((m) => m.id === message.id)) {
+            const trimmed = [message, ...saved].slice(0, 200);
+            localStorage.setItem(storageKey, JSON.stringify(trimmed));
           }
         } catch (e) {}
       }
@@ -156,26 +146,29 @@ export const useMessageStore = create<MessageState>((set, get) => {
 
     sendMessage: async (channelId: string, content: string) => {
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-      const localMsg: Message = {
-        id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      const topic = getSharedTopic(channelId);
+
+      const msg: Message = {
+        id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
         content,
         createdAt: new Date().toISOString(),
         author: {
-          id: currentUser.id || 'current-user',
+          id: currentUser.id || 'guest-anon',
           name: currentUser.name || 'Pro Member',
-          avatarUrl: currentUser.avatarUrl || 'https://api.dicebear.com/7.x/bottts/svg?seed=Pro',
+          avatarUrl:
+            currentUser.avatarUrl ||
+            `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser.name || 'Pro'}`,
         },
         channelId,
       };
 
-      // 1. Add locally
-      get().addMessage(localMsg);
+      // Add locally (optimistic)
+      get().addMessage(msg);
 
-      // 2. Publish on shared MQTT topic — reaches ALL friends in same server
-      const topic = getSharedTopic(channelId);
-      cloudRelay.publish(topic, localMsg);
+      // Broadcast to all users on same server via MQTT
+      cloudRelay.publish(topic, msg);
 
-      // 3. Try backend
+      // Backend
       try {
         await api.post(`/messages/${channelId}`, { content });
       } catch (err: any) {}

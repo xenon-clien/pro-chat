@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import api from '../lib/api';
 import cloudRelay from '../lib/cloudRelay';
+import { registerServerCodeGetter } from './useMessageStore';
 
 // Server store - exports Channel, Server, ServerMember interfaces
 export interface Channel {
@@ -86,6 +87,13 @@ export const useServerStore = create<ServerState>((set, get) => {
       return DEFAULT_SERVERS;
     }
   })();
+
+  // Register getter so useMessageStore can find the active server's inviteCode for shared MQTT topics
+  registerServerCodeGetter(() => {
+    const { servers, activeServerId } = get();
+    const server = servers.find(s => s.id === activeServerId);
+    return server?.inviteCode || null;
+  });
 
   // Listen for global public server announcements over cloud relay
   if (typeof window !== 'undefined') {
