@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import cloudRelay from '../lib/cloudRelay';
-import webRTCManager from '../lib/webRTCManager';
+import peerJSManager from '../lib/webRTCManager';
 
 export interface VoicePeer {
   id: string;
@@ -13,11 +13,14 @@ export interface VoicePeer {
   isYou?: boolean;
   lastHeartbeat: number;
   remoteStream?: MediaStream;
+  peerId?: string; // PeerJS ID
 }
 
 interface VoiceState {
   activeVoiceChannelId: string | null;
   peers: Record<string, VoicePeer>;
+  myPeerId: string | null;
+  isConnecting: boolean;
   joinVoiceChannel: (
     channelId: string,
     currentUser: { id: string; name: string; avatarUrl?: string },
@@ -36,134 +39,164 @@ interface VoiceState {
 
 let heartbeatTimer: any = null;
 let pruneTimer: any = null;
-let unsubRelay: (() => void) | null = null;
-let currentChannelTopic: string | null = null;
+let unsubPresence: (() => void) | null = null;
+let currentTopic: string | null = null;
+let _currentInviteCode: string = '';
+let _micStream: MediaStream | null = null;
 let _currentUserId: string = '';
-let _localMicStream: MediaStream | null = null;
 
-/** Build a shared voice presence topic using server invite code so all users match */
-function buildVoiceTopic(channelId: string, serverInviteCode?: string): string {
-  if (serverInviteCode) {
-    return `prochat/v1/voice/${serverInviteCode.toUpperCase().replace(/[^A-Z0-9]/g, '-')}`;
+function buildVoiceTopic(channelId: string, inviteCode?: string): string {
+  if (inviteCode) {
+    return `prochat/v1/voice/${inviteCode.toUpperCase().replace(/[^A-Z0-9]/g, '-')}`;
   }
-  return `prochat/v1/voice/presence/${channelId}`;
+  return `prochat/v1/voice/ch-${channelId}`;
 }
 
 export const useVoiceStore = create<VoiceState>((set, get) => ({
   activeVoiceChannelId: null,
   peers: {},
+  myPeerId: null,
+  isConnecting: false,
 
   joinVoiceChannel: (channelId, currentUser, serverInviteCode) => {
-    // Leave previous channel
     get().leaveVoiceChannel();
 
-    const userId = currentUser.id || 'user-' + Math.random().toString(36).substring(2, 6);
+    const userId = currentUser.id || 'u-' + Math.random().toString(36).substring(2, 8);
     _currentUserId = userId;
+    _currentInviteCode = serverInviteCode || channelId;
 
-    const initialPeer: VoicePeer = {
+    const me: VoicePeer = {
       id: userId,
       name: currentUser.name || 'Pro User',
-      avatarUrl:
-        currentUser.avatarUrl ||
-        `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser.name || 'Pro'}`,
+      avatarUrl: currentUser.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${userId}`,
       isMuted: true,
       isSpeaking: false,
       isYou: true,
       lastHeartbeat: Date.now(),
     };
 
-    set({
-      activeVoiceChannelId: channelId,
-      peers: { [userId]: initialPeer },
-    });
+    set({ activeVoiceChannelId: channelId, peers: { [userId]: me }, isConnecting: true });
+    currentTopic = buildVoiceTopic(channelId, serverInviteCode);
 
-    // Use invite-code-based topic so all users on same server match
-    currentChannelTopic = buildVoiceTopic(channelId, serverInviteCode);
-
-    // ── Get mic stream ──
+    // ─── Get Mic ───────────────────────────────────────────────
     navigator.mediaDevices
       .getUserMedia({ audio: true, video: false })
-      .then(async (micStream) => {
-        _localMicStream = micStream;
-
-        // ── Start WebRTC room ──
-        await webRTCManager.joinRoom({
-          roomCode: serverInviteCode || channelId,
-          userId,
-          userName: initialPeer.name,
-          userAvatar: initialPeer.avatarUrl,
-          localStream: micStream,
-          onRemoteStream: (peerId, stream, meta) => {
-            set((state) => ({
-              peers: {
-                ...state.peers,
-                [peerId]: {
-                  id: peerId,
-                  name: meta.name || peerId,
-                  avatarUrl:
-                    meta.avatarUrl ||
-                    `https://api.dicebear.com/7.x/bottts/svg?seed=${peerId}`,
-                  isMuted: false,
-                  isSpeaking: true,
-                  isYou: false,
-                  lastHeartbeat: Date.now(),
-                  remoteStream: stream,
-                },
-              },
-            }));
-          },
-          onPeerLeave: (peerId) => {
-            set((state) => {
-              const next = { ...state.peers };
-              delete next[peerId];
-              return { peers: next };
-            });
-          },
-        });
+      .catch(() => {
+        // Mic denied — create silent stream so PeerJS still works
+        const ctx = new AudioContext();
+        const dest = ctx.createMediaStreamDestination();
+        return dest.stream;
       })
-      .catch((err) => {
-        console.warn('[Voice] Mic access denied, using presence-only mode:', err);
-        // Still do presence even without mic
-        webRTCManager.cleanup();
-      });
+      .then(async (micStream) => {
+        _micStream = micStream;
 
-    // ── MQTT Presence (shows avatar in voice panel even without WebRTC) ──
-    cloudRelay.publish(currentChannelTopic, {
-      type: 'VOICE_JOIN',
-      peer: initialPeer,
-    });
+        // ─── Init PeerJS ───────────────────────────────────────
+        try {
+          const myPeerId = await peerJSManager.init({
+            inviteCode: serverInviteCode || channelId,
+            userId,
+            userName: me.name,
+            userAvatar: me.avatarUrl,
+            localStream: micStream,
+            onRemoteStream: (remotePeerId, stream, meta) => {
+              set((state) => ({
+                peers: {
+                  ...state.peers,
+                  [remotePeerId]: {
+                    id: remotePeerId,
+                    name: meta.name || remotePeerId,
+                    avatarUrl: meta.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${remotePeerId}`,
+                    isMuted: false,
+                    isSpeaking: true,
+                    isYou: false,
+                    lastHeartbeat: Date.now(),
+                    remoteStream: stream,
+                    peerId: remotePeerId,
+                  },
+                },
+              }));
+            },
+            onPeerLeave: (remotePeerId) => {
+              set((state) => {
+                const next = { ...state.peers };
+                // Remove by peerId match
+                Object.keys(next).forEach((k) => {
+                  if (next[k].peerId === remotePeerId || k === remotePeerId) delete next[k];
+                });
+                return { peers: next };
+              });
+            },
+          });
 
-    unsubRelay = cloudRelay.subscribe(currentChannelTopic, (_, data) => {
-      if (!data || !data.type) return;
-
-      if (
-        data.type === 'VOICE_JOIN' ||
-        data.type === 'VOICE_HEARTBEAT' ||
-        data.type === 'VOICE_UPDATE'
-      ) {
-        const incoming: VoicePeer = data.peer;
-        if (incoming?.id && incoming.id !== userId) {
           set((state) => ({
+            myPeerId,
+            isConnecting: false,
             peers: {
               ...state.peers,
-              [incoming.id]: {
-                ...incoming,
-                isYou: false,
-                lastHeartbeat: Date.now(),
-              },
+              [userId]: { ...state.peers[userId], peerId: myPeerId },
             },
           }));
 
-          // Reply with our own presence so new joiner sees us
-          if (data.type === 'VOICE_JOIN') {
-            const myState = get().peers[userId];
-            if (myState && currentChannelTopic) {
-              cloudRelay.publish(currentChannelTopic, {
-                type: 'VOICE_HEARTBEAT',
-                peer: myState,
-              });
-            }
+          // Announce presence with PeerJS ID via MQTT so others can call us
+          cloudRelay.publish(currentTopic!, {
+            type: 'VOICE_JOIN',
+            peer: { ...me, peerId: myPeerId },
+          });
+        } catch (err) {
+          console.warn('[Voice] PeerJS init failed:', err);
+          set({ isConnecting: false });
+        }
+      });
+
+    // ─── MQTT Presence subscription ────────────────────────────
+    unsubPresence = cloudRelay.subscribe(currentTopic, (_, data) => {
+      if (!data?.type) return;
+
+      const { peers } = get();
+      const myId = _currentUserId;
+
+      if (data.type === 'VOICE_JOIN' || data.type === 'VOICE_HEARTBEAT') {
+        const incoming: VoicePeer = data.peer;
+        if (!incoming?.id || incoming.id === myId) return;
+
+        // Add to presence list
+        set((state) => ({
+          peers: {
+            ...state.peers,
+            [incoming.id]: {
+              ...incoming,
+              isYou: false,
+              lastHeartbeat: Date.now(),
+            },
+          },
+        }));
+
+        // If they just joined and we have a PeerJS ID, call them
+        if (data.type === 'VOICE_JOIN' && incoming.peerId) {
+          console.log('[Voice] New peer joined, calling via PeerJS:', incoming.peerId);
+          const myState = get().peers[myId];
+          // Reply with our presence
+          if (myState && currentTopic) {
+            cloudRelay.publish(currentTopic, {
+              type: 'VOICE_HEARTBEAT',
+              peer: { ...myState, peerId: peerJSManager.getMyPeerId() },
+            });
           }
+          // Call them via PeerJS
+          peerJSManager.callPeer(_currentInviteCode, incoming.id);
+        } else if (data.type === 'VOICE_HEARTBEAT' && incoming.peerId && !peers[incoming.id]?.remoteStream) {
+          // Heartbeat from someone we don't have a stream from — try calling
+          peerJSManager.callPeer(_currentInviteCode, incoming.id);
+        }
+      } else if (data.type === 'VOICE_UPDATE') {
+        const p: VoicePeer = data.peer;
+        if (p?.id && p.id !== myId && get().peers[p.id]) {
+          set((state) => ({
+            peers: {
+              ...state.peers,
+              [p.id]: { ...state.peers[p.id], ...p, isYou: false, lastHeartbeat: Date.now() },
+            },
+          }));
         }
       } else if (data.type === 'VOICE_LEAVE' && data.userId) {
         set((state) => {
@@ -174,97 +207,86 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       }
     });
 
-    // Heartbeat every 3s
+    // Heartbeat every 4s
     if (heartbeatTimer) clearInterval(heartbeatTimer);
     heartbeatTimer = setInterval(() => {
-      const myState = get().peers[userId];
-      if (myState && currentChannelTopic) {
-        cloudRelay.publish(currentChannelTopic, {
+      const myState = get().peers[_currentUserId];
+      if (myState && currentTopic) {
+        cloudRelay.publish(currentTopic, {
           type: 'VOICE_HEARTBEAT',
-          peer: { ...myState, lastHeartbeat: Date.now() },
+          peer: { ...myState, peerId: peerJSManager.getMyPeerId(), lastHeartbeat: Date.now() },
         });
       }
-    }, 3000);
+    }, 4000);
 
-    // Prune stale peers
+    // Prune stale peers (no heartbeat >15s)
     if (pruneTimer) clearInterval(pruneTimer);
     pruneTimer = setInterval(() => {
       const now = Date.now();
-      const currentPeers = get().peers;
-      let hasChanges = false;
-      const nextPeers: Record<string, VoicePeer> = {};
-      Object.entries(currentPeers).forEach(([id, p]) => {
-        if (p.isYou || now - p.lastHeartbeat < 10000) {
-          nextPeers[id] = p;
+      const current = get().peers;
+      let changed = false;
+      const next: Record<string, VoicePeer> = {};
+      Object.entries(current).forEach(([id, p]) => {
+        if (p.isYou || now - p.lastHeartbeat < 15000) {
+          next[id] = p;
         } else {
-          hasChanges = true;
+          changed = true;
         }
       });
-      if (hasChanges) set({ peers: nextPeers });
-    }, 4000);
+      if (changed) set({ peers: next });
+    }, 5000);
   },
 
   leaveVoiceChannel: () => {
     const { activeVoiceChannelId, peers } = get();
     if (!activeVoiceChannelId) return;
 
-    const myPeer = Object.values(peers).find((p) => p.isYou);
-    if (myPeer && currentChannelTopic) {
-      cloudRelay.publish(currentChannelTopic, {
-        type: 'VOICE_LEAVE',
-        userId: myPeer.id,
-      });
+    const myPeer = Object.values(peers).find(p => p.isYou);
+    if (myPeer && currentTopic) {
+      cloudRelay.publish(currentTopic, { type: 'VOICE_LEAVE', userId: myPeer.id });
     }
 
-    webRTCManager.cleanup();
-    _localMicStream?.getTracks().forEach((t) => t.stop());
-    _localMicStream = null;
-
-    unsubRelay?.();
-    unsubRelay = null;
+    peerJSManager.cleanup();
+    _micStream?.getTracks().forEach(t => t.stop());
+    _micStream = null;
+    unsubPresence?.();
+    unsubPresence = null;
     if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
     if (pruneTimer) { clearInterval(pruneTimer); pruneTimer = null; }
 
-    currentChannelTopic = null;
+    currentTopic = null;
     _currentUserId = '';
-    set({ activeVoiceChannelId: null, peers: {} });
+    _currentInviteCode = '';
+    set({ activeVoiceChannelId: null, peers: {}, myPeerId: null, isConnecting: false });
   },
 
-  startScreenShare: async (serverInviteCode?: string) => {
+  startScreenShare: async () => {
     try {
       const screenStream = await (navigator.mediaDevices as any).getDisplayMedia({
-        video: { frameRate: 30 },
+        video: { frameRate: 30, width: { ideal: 1920 }, height: { ideal: 1080 } },
         audio: true,
       });
 
-      // Replace local stream in all peer connections
-      await webRTCManager.replaceLocalStream(screenStream);
+      await peerJSManager.replaceStream(screenStream);
 
-      // Update own peer state
       const { peers } = get();
       const myEntry = Object.entries(peers).find(([, p]) => p.isYou);
       if (myEntry) {
         const [myId, myPeer] = myEntry;
         const updated = { ...myPeer, isScreenSharing: true, lastHeartbeat: Date.now() };
         set({ peers: { ...peers, [myId]: updated } });
-        if (currentChannelTopic) {
-          cloudRelay.publish(currentChannelTopic, { type: 'VOICE_UPDATE', peer: updated });
-        }
+        if (currentTopic) cloudRelay.publish(currentTopic, { type: 'VOICE_UPDATE', peer: updated });
       }
 
-      // When screen share ends (user clicks browser "Stop sharing")
-      screenStream.getVideoTracks()[0].onended = () => {
-        get().stopScreenShare();
-      };
+      screenStream.getVideoTracks()[0].onended = () => get().stopScreenShare();
     } catch (err) {
-      console.warn('[ScreenShare] User cancelled or browser denied:', err);
+      console.warn('[ScreenShare] Cancelled or denied:', err);
     }
   },
 
   stopScreenShare: () => {
-    // Revert to mic stream
-    if (_localMicStream) {
-      webRTCManager.replaceLocalStream(_localMicStream).catch(() => {});
+    if (_micStream) {
+      peerJSManager.replaceStream(_micStream).catch(() => {});
     }
 
     const { peers } = get();
@@ -273,9 +295,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       const [myId, myPeer] = myEntry;
       const updated = { ...myPeer, isScreenSharing: false, lastHeartbeat: Date.now() };
       set({ peers: { ...peers, [myId]: updated } });
-      if (currentChannelTopic) {
-        cloudRelay.publish(currentChannelTopic, { type: 'VOICE_UPDATE', peer: updated });
-      }
+      if (currentTopic) cloudRelay.publish(currentTopic, { type: 'VOICE_UPDATE', peer: updated });
     }
   },
 
@@ -286,11 +306,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
     const [myId, myPeer] = myEntry;
     const updated: VoicePeer = { ...myPeer, ...updates, lastHeartbeat: Date.now() };
-
     set({ peers: { ...peers, [myId]: updated } });
 
-    if (currentChannelTopic) {
-      cloudRelay.publish(currentChannelTopic, { type: 'VOICE_UPDATE', peer: updated });
+    if (currentTopic) {
+      cloudRelay.publish(currentTopic, { type: 'VOICE_UPDATE', peer: updated });
     }
   },
 }));
