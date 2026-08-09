@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Volume2, Mic, MicOff, Video, VideoOff, ScreenShare, 
-  PhoneOff, Users, Maximize2, Minimize2, Activity,
+  PhoneOff, Phone, Users, Maximize2, Minimize2, Activity,
   Radio, AlertCircle, Music2, Zap, Sparkles, Monitor,
   Headphones, VolumeX, Shield, Crown, Settings, RefreshCw
 } from 'lucide-react';
@@ -458,15 +458,17 @@ export const VoiceArea: React.FC = () => {
               <span>Soundboard</span>
             </button>
 
-            {/* 🔴 Disconnect / Leave Button */}
+            {/* 🔴 Clean Solid Red Disconnect Button */}
             <button
               onClick={handleDisconnect}
-              className="w-12 h-12 bg-rose-600/20 hover:bg-rose-600 border border-rose-500/40 text-rose-400 hover:text-white rounded-2xl flex items-center justify-center transition-all shadow-md cursor-pointer"
-              title="Disconnect from Voice"
+              className="h-12 px-4 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-black text-xs rounded-2xl flex items-center space-x-1.5 transition-all shadow-lg shadow-rose-600/30 cursor-pointer"
+              title="Disconnect / Leave Call"
             >
-              <PhoneOff size={20} />
+              <Phone size={16} className="rotate-[135deg] fill-white" />
+              <span>Leave</span>
             </button>
           </div>
+
 
           {/* Right: Share Screen Button */}
           <div className="flex items-center space-x-3">
