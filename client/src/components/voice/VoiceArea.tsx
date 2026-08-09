@@ -19,7 +19,7 @@ export const VoiceArea: React.FC = () => {
   const { servers, activeServerId, activeChannelId, setActiveChannel } = useServerStore();
   const { user } = useAuthStore();
   const { isNitro } = useNitroStore();
-  const { peers, joinVoiceChannel, leaveVoiceChannel, updateLocalState } = useVoiceStore();
+  const { peers, joinVoiceChannel, leaveVoiceChannel, updateLocalState, startScreenShare, stopScreenShare } = useVoiceStore();
 
   const [isMuted, setIsMuted] = useState(true);
   const [isDeafened, setIsDeafened] = useState(false);
@@ -42,20 +42,24 @@ export const VoiceArea: React.FC = () => {
   const activeServer = servers.find(s => s.id === activeServerId) || servers[0];
   const activeChannel = activeServer?.channels.find(c => c.id === activeChannelId) || activeServer?.channels[0];
 
-  // Join voice channel presence when entering
+  // Join voice channel with server invite code so all users share same MQTT topic
   useEffect(() => {
     if (activeChannelId) {
-      joinVoiceChannel(activeChannelId, {
-        id: user?.id || 'usr-' + Date.now(),
-        name: user?.name || 'shivam',
-        avatarUrl: user?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${user?.name || 'shivam'}&backgroundColor=fbbf24`,
-      });
+      joinVoiceChannel(
+        activeChannelId,
+        {
+          id: user?.id || 'usr-' + Date.now(),
+          name: user?.name || 'Pro User',
+          avatarUrl: user?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${user?.name || 'Pro'}&backgroundColor=fbbf24`,
+        },
+        activeServer?.inviteCode  // ← pass invite code for shared MQTT topic
+      );
     }
 
     return () => {
       leaveVoiceChannel();
     };
-  }, [activeChannelId, user?.id, user?.name, user?.avatarUrl, joinVoiceChannel, leaveVoiceChannel]);
+  }, [activeChannelId, user?.id, user?.name, user?.avatarUrl, activeServer?.inviteCode, joinVoiceChannel, leaveVoiceChannel]);
 
   // Actual connected members list from real-time presence (NO FAKE / DUMMY IMAGES)
   const connectedList = Object.values(peers);
@@ -97,30 +101,13 @@ export const VoiceArea: React.FC = () => {
     };
   }, [isCameraOn]);
 
-  // Native Screen sharing execution after picker modal
+  // Native Screen sharing — captures screen AND sends it to peers via WebRTC
   const handleStartStream = async (options: { resolution: string; fps: string; shareAudio: boolean }) => {
     try {
-      const displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          frameRate: options.fps === '60' ? 60 : 30,
-        },
-        audio: options.shareAudio,
-      });
-
-      screenStreamRef.current = displayStream;
-      setStreamQuality({ res: options.resolution, fps: options.fps });
+      // Use store's startScreenShare which handles WebRTC stream replacement
+      await startScreenShare(activeServer?.inviteCode);
       setIsScreenSharing(true);
       setStreamError(null);
-      updateLocalState({ isScreenSharing: true });
-
-      displayStream.getVideoTracks()[0].onended = () => {
-        setIsScreenSharing(false);
-        updateLocalState({ isScreenSharing: false });
-        if (screenStreamRef.current) {
-          screenStreamRef.current.getTracks().forEach(track => track.stop());
-          screenStreamRef.current = null;
-        }
-      };
     } catch (err: any) {
       if (err.name !== 'NotAllowedError') {
         setStreamError('Failed to start screen share: ' + (err.message || 'Permission denied'));
@@ -129,15 +116,8 @@ export const VoiceArea: React.FC = () => {
   };
 
   const handleStopStream = () => {
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
-      screenStreamRef.current = null;
-    }
-    if (screenVideoRef.current) {
-      screenVideoRef.current.srcObject = null;
-    }
+    stopScreenShare();
     setIsScreenSharing(false);
-    updateLocalState({ isScreenSharing: false });
   };
 
   // Toggle Fullscreen on Screen Share
@@ -504,6 +484,17 @@ export const VoiceArea: React.FC = () => {
         isOpen={isNitroModalOpen}
         onClose={() => setIsNitroModalOpen(false)}
       />
+
+      {/* Hidden audio elements to play remote peer streams via WebRTC */}
+      {Object.values(peers).filter(p => !p.isYou && p.remoteStream).map(peer => (
+        <audio
+          key={peer.id}
+          autoPlay
+          playsInline
+          ref={(el) => { if (el && peer.remoteStream) el.srcObject = peer.remoteStream; }}
+          style={{ display: 'none' }}
+        />
+      ))}
     </div>
   );
 };
