@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import api from '../lib/api';
+import cloudRelay from '../lib/cloudRelay';
 
 // Server store - exports Channel, Server, ServerMember interfaces
 export interface Channel {
@@ -26,13 +27,14 @@ export interface ServerMember {
 
 interface ServerState {
   servers: Server[];
+  publicDirectory: Server[];
   activeServerId: string | null;
   activeChannelId: string | null;
   isLoading: boolean;
   error: string | null;
   fetchServers: () => Promise<void>;
-  createServer: (name: string) => Promise<void>;
-  joinServerByCode: (code: string) => Promise<Server>;
+  createServer: (name: string) => Promise<Server>;
+  joinServerByCode: (codeOrName: string) => Promise<Server>;
   updateServer: (serverId: string, data: { name?: string; iconUrl?: string }) => Promise<Server>;
   deleteServer: (serverId: string) => Promise<void>;
   createChannel: (serverId: string, name: string, type?: string) => Promise<void>;
@@ -49,9 +51,7 @@ const DEFAULT_SERVERS: Server[] = [
     channels: [
       { id: 'ch-general', name: 'general', type: 'TEXT', serverId: 'pro-chat-hq' },
       { id: 'ch-lounge', name: 'lounge', type: 'TEXT', serverId: 'pro-chat-hq' },
-      { id: 'ch-nitro-chat', name: 'nitro-exclusive', type: 'TEXT', serverId: 'pro-chat-hq' },
       { id: 'ch-voice-1', name: 'General Voice', type: 'VOICE', serverId: 'pro-chat-hq' },
-      { id: 'ch-voice-gaming', name: 'Gaming Room 🎮', type: 'VOICE', serverId: 'pro-chat-hq' },
     ]
   },
   {
@@ -60,190 +60,203 @@ const DEFAULT_SERVERS: Server[] = [
     iconUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=GamingZone',
     inviteCode: 'GAME-7799',
     channels: [
-      { id: 'ch-gaming-chat', name: 'chat', type: 'TEXT', serverId: 'gaming-zone' },
+      { id: 'ch-gaming-chat', name: 'general', type: 'TEXT', serverId: 'gaming-zone' },
       { id: 'ch-gaming-voice', name: 'Squad Voice', type: 'VOICE', serverId: 'gaming-zone' },
+    ]
+  },
+  {
+    id: 'anime-lounge',
+    name: 'Anime & Manga Lounge',
+    iconUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=AnimeLounge',
+    inviteCode: 'ANIME-101',
+    channels: [
+      { id: 'ch-anime-general', name: 'general', type: 'TEXT', serverId: 'anime-lounge' },
+      { id: 'ch-anime-voice', name: 'Watch Party', type: 'VOICE', serverId: 'anime-lounge' },
     ]
   }
 ];
 
-
-export const useServerStore = create<ServerState>((set, get) => ({
-  servers: DEFAULT_SERVERS,
-  activeServerId: 'pro-chat-hq',
-  activeChannelId: 'ch-general',
-  isLoading: false,
-  error: null,
-
-  fetchServers: async () => {
-    set({ isLoading: true, error: null });
+export const useServerStore = create<ServerState>((set, get) => {
+  // Load saved servers from localStorage
+  const savedServers = (() => {
     try {
-      const response = await api.get('/servers/init');
-      const servers = response.data.map((member: ServerMember) => member.server);
-      if (servers.length > 0) {
-        set({ 
-          servers, 
-          isLoading: false,
-          activeServerId: servers[0].id,
-          activeChannelId: servers[0].channels.length > 0 ? servers[0].channels[0].id : null,
-        });
-      } else {
-        set({ servers: DEFAULT_SERVERS, isLoading: false });
+      const stored = localStorage.getItem('prochat_user_servers');
+      return stored ? JSON.parse(stored) : DEFAULT_SERVERS;
+    } catch {
+      return DEFAULT_SERVERS;
+    }
+  })();
+
+  // Listen for global public server announcements over cloud relay
+  if (typeof window !== 'undefined') {
+    cloudRelay.subscribe('prochat/v1/servers/directory', (_, data) => {
+      if (data && data.server) {
+        const incomingServer: Server = data.server;
+        const currentDir = get().publicDirectory;
+        if (!currentDir.find(s => s.id === incomingServer.id || s.name.toLowerCase() === incomingServer.name.toLowerCase())) {
+          set({ publicDirectory: [incomingServer, ...currentDir] });
+        }
       }
-    } catch (err: any) {
-      console.warn('Backend server init failed, using default servers:', err);
-      set({ 
-        servers: DEFAULT_SERVERS, 
-        activeServerId: 'pro-chat-hq',
-        activeChannelId: 'ch-general',
-        isLoading: false,
-        error: null 
-      });
-    }
-  },
+    });
+  }
 
-  createServer: async (name: string) => {
-    try {
-      const response = await api.post('/servers', { name });
-      const newServer = response.data;
-      set((state) => ({
-        servers: [...state.servers, newServer],
-        activeServerId: newServer.id,
-        activeChannelId: newServer.channels[0].id
-      }));
-    } catch (err: any) {
-      console.warn('Backend offline, creating local server:', err);
-      const localId = 'server-' + Date.now();
+  return {
+    servers: savedServers,
+    publicDirectory: DEFAULT_SERVERS,
+    activeServerId: savedServers[0]?.id || 'pro-chat-hq',
+    activeChannelId: savedServers[0]?.channels[0]?.id || 'ch-general',
+    isLoading: false,
+    error: null,
+
+    fetchServers: async () => {
+      try {
+        const response = await api.get('/servers/init');
+        const servers = response.data.map((member: ServerMember) => member.server);
+        if (servers.length > 0) {
+          localStorage.setItem('prochat_user_servers', JSON.stringify(servers));
+          set({ 
+            servers, 
+            isLoading: false,
+            activeServerId: servers[0].id,
+            activeChannelId: servers[0].channels.length > 0 ? servers[0].channels[0].id : null,
+          });
+        }
+      } catch (err: any) {
+        // Handled locally
+      }
+    },
+
+    createServer: async (name: string) => {
+      const cleanName = name.trim();
+      const serverId = 'server-' + Date.now();
+      const code = cleanName.substring(0, 4).toUpperCase().replace(/[^A-Z]/g, 'PRO') + '-' + Math.floor(1000 + Math.random() * 9000);
+      
       const newServer: Server = {
-        id: localId,
-        name,
-        channels: [
-          { id: 'ch-gen-' + localId, name: 'general', type: 'TEXT', serverId: localId },
-          { id: 'ch-voice-' + localId, name: 'General Voice', type: 'VOICE', serverId: localId },
-        ]
-      };
-      set((state) => ({
-        servers: [...state.servers, newServer],
-        activeServerId: newServer.id,
-        activeChannelId: newServer.channels[0].id
-      }));
-    }
-  },
-
-  joinServerByCode: async (rawCode: string) => {
-    const code = rawCode.trim().toUpperCase().replace(/^HTTPS?:\/\/[^/]+\/INVITE\//, '').replace(/^PROCHAT\.GG\//, '');
-    const state = get();
-
-    // Check if user is already in server with this invite code
-    const existing = state.servers.find(s => s.inviteCode?.toUpperCase() === code || s.id.toUpperCase() === code);
-    if (existing) {
-      set({
-        activeServerId: existing.id,
-        activeChannelId: existing.channels.length > 0 ? existing.channels[0].id : null,
-      });
-      return existing;
-    }
-
-    try {
-      const response = await api.post('/servers/join', { inviteCode: code });
-      const joinedServer = response.data;
-      set((s) => ({
-        servers: [...s.servers, joinedServer],
-        activeServerId: joinedServer.id,
-        activeChannelId: joinedServer.channels.length > 0 ? joinedServer.channels[0].id : null,
-      }));
-      return joinedServer;
-    } catch (err: any) {
-      console.warn('Backend server join fallback active:', err);
-      // Create joined server representation from code
-      const serverId = 'joined-' + code.toLowerCase();
-      const serverName = code.includes('HQ') ? 'Pro Chat Community' : `Guild [${code}]`;
-      const newJoinedServer: Server = {
         id: serverId,
-        name: serverName,
-        iconUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${code}`,
+        name: cleanName,
+        iconUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(cleanName)}`,
         inviteCode: code,
         channels: [
           { id: 'ch-gen-' + serverId, name: 'general', type: 'TEXT', serverId },
-          { id: 'ch-lounge-' + serverId, name: 'lounge', type: 'TEXT', serverId },
-          { id: 'ch-voice-' + serverId, name: 'Voice Hangout', type: 'VOICE', serverId },
+          { id: 'ch-voice-' + serverId, name: 'General Voice', type: 'VOICE', serverId },
         ]
       };
-      set((s) => ({
-        servers: [...s.servers, newJoinedServer],
-        activeServerId: newJoinedServer.id,
-        activeChannelId: newJoinedServer.channels[0].id,
-      }));
-      return newJoinedServer;
-    }
-  },
 
+      const updated = [...get().servers, newServer];
+      localStorage.setItem('prochat_user_servers', JSON.stringify(updated));
 
-  updateServer: async (serverId: string, data: { name?: string; iconUrl?: string }) => {
-    try {
-      const response = await api.patch(`/servers/${serverId}`, data);
-      const updatedServer = response.data;
+      // Announce server to global directory so anyone across the world can discover and join it!
+      cloudRelay.publish('prochat/v1/servers/directory', {
+        server: newServer,
+      });
+
       set((state) => ({
-        servers: state.servers.map(s => s.id === serverId ? { ...s, ...updatedServer } : s)
+        servers: updated,
+        publicDirectory: [newServer, ...state.publicDirectory],
+        activeServerId: newServer.id,
+        activeChannelId: newServer.channels[0].id
       }));
-      return updatedServer;
-    } catch (err: any) {
-      console.warn('Backend offline, updating local server:', err);
+
+      try {
+        await api.post('/servers', { name: cleanName });
+      } catch (err) {
+        // Handled
+      }
+
+      return newServer;
+    },
+
+    joinServerByCode: async (rawCodeOrName: string) => {
+      const query = rawCodeOrName.trim().toUpperCase().replace(/^HTTPS?:\/\/[^/]+\/INVITE\//, '').replace(/^PROCHAT\.GG\//, '');
+      const state = get();
+
+      // 1. Check if user already joined this server
+      const existingInUser = state.servers.find(
+        s => s.inviteCode?.toUpperCase() === query || 
+             s.name.toUpperCase() === query || 
+             s.id.toUpperCase() === query
+      );
+      if (existingInUser) {
+        set({
+          activeServerId: existingInUser.id,
+          activeChannelId: existingInUser.channels.length > 0 ? existingInUser.channels[0].id : null,
+        });
+        return existingInUser;
+      }
+
+      // 2. Check in public directory (servers created by others)
+      const inDirectory = state.publicDirectory.find(
+        s => s.inviteCode?.toUpperCase() === query || 
+             s.name.toUpperCase().includes(query) ||
+             query.includes(s.name.toUpperCase())
+      );
+
+      const serverToJoin: Server = inDirectory || {
+        id: 'joined-' + query.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        name: rawCodeOrName.trim(),
+        iconUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(rawCodeOrName)}`,
+        inviteCode: query.includes('-') ? query : `JOIN-${query}`,
+        channels: [
+          { id: 'ch-gen-' + query.toLowerCase(), name: 'general', type: 'TEXT', serverId: 'joined-' + query.toLowerCase() },
+          { id: 'ch-voice-' + query.toLowerCase(), name: 'General Voice', type: 'VOICE', serverId: 'joined-' + query.toLowerCase() },
+        ]
+      };
+
+      const updated = [...state.servers, serverToJoin];
+      localStorage.setItem('prochat_user_servers', JSON.stringify(updated));
+
+      set({
+        servers: updated,
+        activeServerId: serverToJoin.id,
+        activeChannelId: serverToJoin.channels[0].id,
+      });
+
+      try {
+        await api.post('/servers/join', { inviteCode: query });
+      } catch (err) {
+        // Handled
+      }
+
+      return serverToJoin;
+    },
+
+    updateServer: async (serverId: string, data: { name?: string; iconUrl?: string }) => {
       let updated: any = null;
-      set((state) => ({
-        servers: state.servers.map(s => {
+      set((state) => {
+        const next = state.servers.map(s => {
           if (s.id === serverId) {
             updated = { ...s, ...data };
             return updated;
           }
           return s;
-        })
-      }));
+        });
+        localStorage.setItem('prochat_user_servers', JSON.stringify(next));
+        return { servers: next };
+      });
       return updated;
-    }
-  },
+    },
 
-  deleteServer: async (serverId: string) => {
-    try {
-      await api.delete(`/servers/${serverId}`);
-    } catch (err: any) {
-      console.warn('Backend offline, deleting local server:', err);
-    }
-    set((state) => {
-      const remaining = state.servers.filter(s => s.id !== serverId);
-      return {
-        servers: remaining,
-        activeServerId: remaining.length > 0 ? remaining[0].id : null,
-        activeChannelId: remaining.length > 0 && remaining[0].channels.length > 0 ? remaining[0].channels[0].id : null
-      };
-    });
-  },
+    deleteServer: async (serverId: string) => {
+      set((state) => {
+        const remaining = state.servers.filter(s => s.id !== serverId);
+        localStorage.setItem('prochat_user_servers', JSON.stringify(remaining));
+        return {
+          servers: remaining,
+          activeServerId: remaining.length > 0 ? remaining[0].id : null,
+          activeChannelId: remaining.length > 0 && remaining[0].channels.length > 0 ? remaining[0].channels[0].id : null
+        };
+      });
+    },
 
-  createChannel: async (serverId: string, name: string, type = 'TEXT') => {
-    try {
-      const response = await api.post(`/servers/${serverId}/channels`, { name, type });
-      const newChannel = response.data;
-      set((state) => ({
-        servers: state.servers.map((server) => {
-          if (server.id === serverId) {
-            return {
-              ...server,
-              channels: [...server.channels, newChannel]
-            };
-          }
-          return server;
-        }),
-        activeChannelId: newChannel.id
-      }));
-    } catch (err: any) {
-      console.warn('Backend offline, creating local channel:', err);
+    createChannel: async (serverId: string, name: string, type = 'TEXT') => {
       const newChannel: Channel = {
         id: 'ch-' + Date.now(),
         name,
         type,
         serverId
       };
-      set((state) => ({
-        servers: state.servers.map((server) => {
+      set((state) => {
+        const next = state.servers.map((server) => {
           if (server.id === serverId) {
             return {
               ...server,
@@ -251,20 +264,20 @@ export const useServerStore = create<ServerState>((set, get) => ({
             };
           }
           return server;
-        }),
-        activeChannelId: newChannel.id
-      }));
-    }
-  },
+        });
+        localStorage.setItem('prochat_user_servers', JSON.stringify(next));
+        return { servers: next, activeChannelId: newChannel.id };
+      });
+    },
 
-  setActiveServer: (id: string) => {
-    const state = get();
-    const server = state.servers.find(s => s.id === id);
-    set({ 
-      activeServerId: id,
-      activeChannelId: server?.channels?.length ? server.channels[0].id : null
-    });
-  },
-  setActiveChannel: (id: string) => set({ activeChannelId: id }),
-}));
-
+    setActiveServer: (id: string) => {
+      const state = get();
+      const server = state.servers.find(s => s.id === id);
+      set({ 
+        activeServerId: id,
+        activeChannelId: server?.channels?.length ? server.channels[0].id : null
+      });
+    },
+    setActiveChannel: (id: string) => set({ activeChannelId: id }),
+  };
+});

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Sparkles, UserPlus, ArrowRight, Shield } from 'lucide-react';
+import { X, Sparkles, UserPlus, ArrowRight, Search, Compass, Check, Users, Hash, Volume2 } from 'lucide-react';
 import { useServerStore } from '../../store/useServerStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import clsx from 'clsx';
@@ -16,10 +16,10 @@ export const CreateServerModal: React.FC<CreateServerModalProps> = ({
   initialMode = 'create' 
 }) => {
   const { user } = useAuthStore();
-  const { createServer, joinServerByCode } = useServerStore();
+  const { createServer, joinServerByCode, publicDirectory, servers } = useServerStore();
   const [mode, setMode] = useState<'create' | 'join'>(initialMode);
-  const [serverName, setServerName] = useState(`${user?.name || 'My'}'s Server`);
-  const [inviteCode, setInviteCode] = useState('');
+  const [serverName, setServerName] = useState(`${user?.name || 'My'}'s Guild`);
+  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,80 +44,93 @@ export const CreateServerModal: React.FC<CreateServerModalProps> = ({
     }
   };
 
-  const handleJoinSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inviteCode.trim()) {
-      setError('Please enter an invite code or link');
+  const handleJoinServer = async (codeOrName: string) => {
+    if (!codeOrName.trim()) {
+      setError('Please enter a server name or code');
       return;
     }
 
     setIsLoading(true);
     setError(null);
     try {
-      await joinServerByCode(inviteCode.trim());
+      await joinServerByCode(codeOrName.trim());
       onClose();
     } catch (err: any) {
-      setError('Invalid invite code or unable to join');
+      setError('Could not join server');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Filter public directory by search query
+  const query = searchQuery.trim().toLowerCase();
+  const filteredDirectory = publicDirectory.filter((s) => {
+    if (!query) return true;
+    return (
+      s.name.toLowerCase().includes(query) ||
+      (s.inviteCode && s.inviteCode.toLowerCase().includes(query)) ||
+      s.id.toLowerCase().includes(query)
+    );
+  });
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in select-none">
       <div 
-        className="relative w-full max-w-md bg-[#121418] text-[#dbdee1] rounded-2xl shadow-2xl overflow-hidden border border-yellow-400/30 transform transition-all animate-scale-up"
+        className="relative w-full max-w-lg bg-[#0E121B] text-[#dbdee1] rounded-3xl shadow-2xl overflow-hidden border border-cyan-500/30 transform transition-all animate-scale-up max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-yellow-400 transition-colors p-1.5 rounded-full hover:bg-gray-800 cursor-pointer z-10"
+          className="absolute top-4 right-4 text-gray-400 hover:text-cyan-400 transition-colors p-1.5 rounded-full hover:bg-white/5 cursor-pointer z-10"
         >
-          <X size={20} />
+          <X size={18} />
         </button>
 
-        {/* Tab Header: Create vs Join */}
-        <div className="flex border-b border-[#1e222a] bg-[#090A0D]">
+        {/* Tab Header: Create vs Discover & Join */}
+        <div className="flex border-b border-[#181D2A] bg-[#0A0D14] shrink-0">
           <button
             onClick={() => { setMode('create'); setError(null); }}
             className={clsx(
-              "flex-1 py-3 text-xs font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer",
+              "flex-1 py-3.5 text-xs font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer flex items-center justify-center gap-2",
               mode === 'create'
-                ? "border-yellow-400 text-yellow-400 bg-[#121418]"
+                ? "border-pink-400 text-pink-400 bg-[#0E121B]"
                 : "border-transparent text-gray-400 hover:text-white"
             )}
           >
-            Create a Server
+            <Sparkles size={14} />
+            <span>Create a Server</span>
           </button>
+          
           <button
             onClick={() => { setMode('join'); setError(null); }}
             className={clsx(
-              "flex-1 py-3 text-xs font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer flex items-center justify-center gap-1.5",
+              "flex-1 py-3.5 text-xs font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer flex items-center justify-center gap-2",
               mode === 'join'
-                ? "border-yellow-400 text-yellow-400 bg-[#121418]"
+                ? "border-cyan-400 text-cyan-400 bg-[#0E121B]"
                 : "border-transparent text-gray-400 hover:text-white"
             )}
           >
-            <UserPlus size={14} />
-            <span>Join with Code</span>
+            <Compass size={14} />
+            <span>Discover & Join Servers</span>
           </button>
         </div>
 
-        {mode === 'create' ? (
-          /* Create Server View */
-          <form onSubmit={handleCreateSubmit}>
-            <div className="p-6 text-center pb-2">
-              <div className="mx-auto w-12 h-12 bg-yellow-400/10 text-yellow-400 border border-yellow-400/30 rounded-2xl flex items-center justify-center mb-3 shadow-lg shadow-yellow-400/5">
-                <Sparkles size={24} className="text-yellow-400" />
+        {/* Modal Body */}
+        <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+          {mode === 'create' ? (
+            /* ──────── CREATE SERVER FORM ──────── */
+            <form onSubmit={handleCreateSubmit} className="space-y-4">
+              <div className="text-center pb-2">
+                <div className="mx-auto w-12 h-12 bg-pink-500/10 text-pink-400 border border-pink-500/30 rounded-2xl flex items-center justify-center mb-3 shadow-lg shadow-pink-500/10">
+                  <Sparkles size={24} />
+                </div>
+                <h2 className="text-2xl font-black text-white tracking-tight">Create Your Server</h2>
+                <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto leading-relaxed">
+                  Your server is where you and your friends hang out. Name it and invite your squad!
+                </p>
               </div>
-              <h2 className="text-2xl font-black text-white tracking-tight">Create Your Server</h2>
-              <p className="text-xs text-gray-400 mt-1 px-4 leading-relaxed">
-                Your server is where you and your friends hang out. Make yours and start talking.
-              </p>
-            </div>
 
-            <div className="px-6 py-4 space-y-4">
               {error && (
                 <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-semibold">
                   {error}
@@ -125,116 +138,149 @@ export const CreateServerModal: React.FC<CreateServerModalProps> = ({
               )}
 
               <div>
-                <label className="block text-xs font-black uppercase tracking-wider text-yellow-400 mb-2">
+                <label className="block text-xs font-black uppercase tracking-wider text-pink-400 mb-2">
                   Server Name
                 </label>
                 <input
                   type="text"
                   value={serverName}
                   onChange={(e) => setServerName(e.target.value)}
-                  placeholder="e.g. Awesome Gaming Guild"
-                  className="w-full bg-[#090A0D] text-white px-3.5 py-2.5 rounded-xl border border-gray-800 focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400/40 outline-none transition-all text-sm font-semibold"
+                  placeholder="e.g. Gaming Squad or Anime Guild"
+                  className="w-full bg-[#07090E] text-white px-4 py-3 rounded-2xl border border-gray-800 focus:border-pink-400 focus:ring-1 focus:ring-pink-400/40 outline-none transition-all text-sm font-semibold"
                   autoFocus
                   maxLength={40}
                 />
+                <p className="text-[11px] text-gray-500 mt-2">
+                  ✨ Will be instantly published to the global directory for all your friends to discover and join.
+                </p>
               </div>
-            </div>
 
-            <div className="bg-[#090A0D] px-6 py-4 flex items-center justify-between border-t border-[#1e222a]">
-              <button
-                type="button"
-                onClick={() => setMode('join')}
-                className="text-xs font-bold text-gray-400 hover:text-yellow-400 transition-colors"
-              >
-                Have an invite code?
-              </button>
-              <button
-                type="submit"
-                disabled={isLoading || !serverName.trim()}
-                className="bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-black text-xs font-extrabold px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-yellow-400/20 disabled:opacity-50 flex items-center space-x-2 cursor-pointer"
-              >
-                {isLoading ? <span>Creating...</span> : <span>Create Server</span>}
-              </button>
-            </div>
-          </form>
-        ) : (
-          /* Join Server View */
-          <form onSubmit={handleJoinSubmit}>
-            <div className="p-6 text-center pb-2">
-              <div className="mx-auto w-12 h-12 bg-yellow-400/10 text-yellow-400 border border-yellow-400/30 rounded-2xl flex items-center justify-center mb-3 shadow-lg shadow-yellow-400/5">
-                <UserPlus size={24} className="text-yellow-400" />
+              <div className="pt-3 flex items-center justify-between border-t border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setMode('join')}
+                  className="text-xs font-bold text-gray-400 hover:text-cyan-400 transition-colors"
+                >
+                  Looking to join an existing server?
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading || !serverName.trim()}
+                  className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 text-white text-xs font-black px-6 py-3 rounded-2xl transition-all shadow-lg shadow-pink-500/20 disabled:opacity-50 cursor-pointer"
+                >
+                  {isLoading ? <span>Creating...</span> : <span>Create Server</span>}
+                </button>
               </div>
-              <h2 className="text-2xl font-black text-white tracking-tight">Join a Server</h2>
-              <p className="text-xs text-gray-400 mt-1 px-4 leading-relaxed">
-                Enter an invite code below to join an existing server with your friends.
-              </p>
-            </div>
+            </form>
+          ) : (
+            /* ──────── DISCOVER & SEARCH SERVERS ──────── */
+            <div className="space-y-4">
+              <div className="text-center pb-1">
+                <h2 className="text-xl font-black text-white tracking-tight">Search & Join Servers</h2>
+                <p className="text-xs text-gray-400 mt-1">
+                  Type any server name or invite code to find and join it in 1-click!
+                </p>
+              </div>
 
-            <div className="px-6 py-4 space-y-4">
               {error && (
                 <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-semibold">
                   {error}
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-black uppercase tracking-wider text-yellow-400 mb-2">
-                  Server Invite Code or Link <span className="text-red-500">*</span>
-                </label>
+              {/* Search Bar */}
+              <div className="relative">
                 <input
                   type="text"
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value)}
-                  placeholder="e.g. PRO-HQ-8821 or GAME-7799"
-                  className="w-full bg-[#090A0D] text-white px-3.5 py-2.5 rounded-xl border border-gray-800 focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400/40 outline-none transition-all text-sm font-mono uppercase"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search servers by name or code (e.g. Gaming, HQ, Anime)..."
+                  className="w-full bg-[#07090E] text-white px-4 py-3 pl-10 rounded-2xl border border-gray-800 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 outline-none text-xs font-semibold transition-all"
                   autoFocus
                 />
-                
-                <div className="mt-3 space-y-1.5 bg-[#090A0D] p-3 rounded-xl border border-white/5 text-[11px] text-gray-400">
-                  <div className="font-bold text-gray-300 text-xs mb-1">Sample Available Invite Codes:</div>
-                  <div 
-                    onClick={() => setInviteCode('PRO-HQ-8821')}
-                    className="flex items-center justify-between text-yellow-400 hover:underline cursor-pointer"
-                  >
-                    <span>• Pro Chat HQ Server</span>
-                    <span className="font-mono bg-yellow-400/10 px-1.5 py-0.5 rounded">PRO-HQ-8821</span>
+                <Search size={16} className="absolute left-3.5 top-3.5 text-gray-500" />
+              </div>
+
+              {/* Direct Join Action if User typed a custom code/name */}
+              {searchQuery.trim() && !filteredDirectory.some(s => s.name.toLowerCase() === query || s.inviteCode?.toLowerCase() === query) && (
+                <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-400/30 flex items-center justify-between animate-fade-in">
+                  <div>
+                    <div className="text-xs font-bold text-white">Join by name: <span className="text-cyan-300 font-mono">"{searchQuery.trim()}"</span></div>
+                    <div className="text-[10px] text-gray-400">Connect to this server guild directly</div>
                   </div>
-                  <div 
-                    onClick={() => setInviteCode('GAME-7799')}
-                    className="flex items-center justify-between text-yellow-400 hover:underline cursor-pointer"
+                  <button
+                    onClick={() => handleJoinServer(searchQuery.trim())}
+                    className="px-4 py-2 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-black font-black text-xs shadow-md cursor-pointer flex items-center space-x-1"
                   >
-                    <span>• Gaming Hub Guild</span>
-                    <span className="font-mono bg-yellow-400/10 px-1.5 py-0.5 rounded">GAME-7799</span>
-                  </div>
+                    <span>Join Now</span>
+                    <ArrowRight size={13} />
+                  </button>
                 </div>
+              )}
+
+              {/* Server List Results */}
+              <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                <div className="text-[10px] font-black uppercase text-gray-400 px-1">
+                  Available Public Servers ({filteredDirectory.length})
+                </div>
+
+                {filteredDirectory.map((srv) => {
+                  const isAlreadyJoined = servers.some(s => s.id === srv.id || s.name === srv.name);
+
+                  return (
+                    <div
+                      key={srv.id}
+                      className="p-3 bg-[#111522] hover:bg-[#161B28] rounded-2xl border border-white/5 hover:border-cyan-400/40 transition-all flex items-center justify-between group"
+                    >
+                      <div className="flex items-center space-x-3 truncate">
+                        <img
+                          src={srv.iconUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(srv.name)}`}
+                          alt={srv.name}
+                          className="w-10 h-10 rounded-xl object-contain border border-white/10 shrink-0"
+                        />
+                        <div className="truncate">
+                          <div className="font-extrabold text-sm text-white group-hover:text-cyan-300 transition-colors truncate">
+                            {srv.name}
+                          </div>
+                          <div className="flex items-center space-x-2 text-[11px] text-gray-400">
+                            {srv.inviteCode && (
+                              <span className="font-mono text-cyan-400 bg-cyan-400/10 px-1.5 py-0.2 rounded text-[10px] font-bold">
+                                {srv.inviteCode}
+                              </span>
+                            )}
+                            <span>• {srv.channels?.length || 2} Channels</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleJoinServer(srv.inviteCode || srv.name)}
+                        className={clsx(
+                          "px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 flex items-center space-x-1 shadow-md",
+                          isAlreadyJoined
+                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                            : "bg-cyan-400 hover:bg-cyan-300 text-black hover:scale-105 active:scale-95"
+                        )}
+                      >
+                        {isAlreadyJoined ? (
+                          <>
+                            <Check size={13} className="stroke-[3]" />
+                            <span>Joined</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Join</span>
+                            <ArrowRight size={13} />
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-
-            <div className="bg-[#090A0D] px-6 py-4 flex items-center justify-between border-t border-[#1e222a]">
-              <button
-                type="button"
-                onClick={() => setMode('create')}
-                className="text-xs font-bold text-gray-400 hover:text-white transition-colors"
-              >
-                Back
-              </button>
-              <button
-                type="submit"
-                disabled={isLoading || !inviteCode.trim()}
-                className="bg-yellow-400 hover:bg-yellow-300 text-black text-xs font-extrabold px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-yellow-400/20 disabled:opacity-50 flex items-center space-x-1.5 cursor-pointer"
-              >
-                {isLoading ? (
-                  <span>Joining...</span>
-                ) : (
-                  <>
-                    <span>Join Server</span>
-                    <ArrowRight size={14} />
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
