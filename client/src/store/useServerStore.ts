@@ -38,10 +38,34 @@ interface ServerState {
   setActiveChannel: (id: string) => void;
 }
 
+const DEFAULT_SERVERS: Server[] = [
+  {
+    id: 'pro-chat-hq',
+    name: 'Pro Chat HQ',
+    iconUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=ProChat',
+    channels: [
+      { id: 'ch-general', name: 'general', type: 'TEXT', serverId: 'pro-chat-hq' },
+      { id: 'ch-lounge', name: 'lounge', type: 'TEXT', serverId: 'pro-chat-hq' },
+      { id: 'ch-nitro-chat', name: 'nitro-exclusive', type: 'TEXT', serverId: 'pro-chat-hq' },
+      { id: 'ch-voice-1', name: 'General Voice', type: 'VOICE', serverId: 'pro-chat-hq' },
+      { id: 'ch-voice-gaming', name: 'Gaming Room 🎮', type: 'VOICE', serverId: 'pro-chat-hq' },
+    ]
+  },
+  {
+    id: 'gaming-zone',
+    name: 'Gaming Hub',
+    iconUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=GamingZone',
+    channels: [
+      { id: 'ch-gaming-chat', name: 'chat', type: 'TEXT', serverId: 'gaming-zone' },
+      { id: 'ch-gaming-voice', name: 'Squad Voice', type: 'VOICE', serverId: 'gaming-zone' },
+    ]
+  }
+];
+
 export const useServerStore = create<ServerState>((set, get) => ({
-  servers: [],
-  activeServerId: null,
-  activeChannelId: null,
+  servers: DEFAULT_SERVERS,
+  activeServerId: 'pro-chat-hq',
+  activeChannelId: 'ch-general',
   isLoading: false,
   error: null,
 
@@ -49,17 +73,26 @@ export const useServerStore = create<ServerState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await api.get('/servers/init');
-      // The API returns members which include the server
       const servers = response.data.map((member: ServerMember) => member.server);
-      
-      set({ 
-        servers, 
-        isLoading: false,
-        activeServerId: servers.length > 0 ? servers[0].id : null,
-        activeChannelId: servers.length > 0 && servers[0].channels.length > 0 ? servers[0].channels[0].id : null,
-      });
+      if (servers.length > 0) {
+        set({ 
+          servers, 
+          isLoading: false,
+          activeServerId: servers[0].id,
+          activeChannelId: servers[0].channels.length > 0 ? servers[0].channels[0].id : null,
+        });
+      } else {
+        set({ servers: DEFAULT_SERVERS, isLoading: false });
+      }
     } catch (err: any) {
-      set({ error: err.response?.data?.message || 'Failed to fetch servers', isLoading: false });
+      console.warn('Backend server init failed, using default servers:', err);
+      set({ 
+        servers: DEFAULT_SERVERS, 
+        activeServerId: 'pro-chat-hq',
+        activeChannelId: 'ch-general',
+        isLoading: false,
+        error: null 
+      });
     }
   },
 
@@ -73,7 +106,21 @@ export const useServerStore = create<ServerState>((set, get) => ({
         activeChannelId: newServer.channels[0].id
       }));
     } catch (err: any) {
-      console.error('Failed to create server', err);
+      console.warn('Backend offline, creating local server:', err);
+      const localId = 'server-' + Date.now();
+      const newServer: Server = {
+        id: localId,
+        name,
+        channels: [
+          { id: 'ch-gen-' + localId, name: 'general', type: 'TEXT', serverId: localId },
+          { id: 'ch-voice-' + localId, name: 'General Voice', type: 'VOICE', serverId: localId },
+        ]
+      };
+      set((state) => ({
+        servers: [...state.servers, newServer],
+        activeServerId: newServer.id,
+        activeChannelId: newServer.channels[0].id
+      }));
     }
   },
 
@@ -86,26 +133,35 @@ export const useServerStore = create<ServerState>((set, get) => ({
       }));
       return updatedServer;
     } catch (err: any) {
-      console.error('Failed to update server', err);
-      throw err;
+      console.warn('Backend offline, updating local server:', err);
+      let updated: any = null;
+      set((state) => ({
+        servers: state.servers.map(s => {
+          if (s.id === serverId) {
+            updated = { ...s, ...data };
+            return updated;
+          }
+          return s;
+        })
+      }));
+      return updated;
     }
   },
 
   deleteServer: async (serverId: string) => {
     try {
       await api.delete(`/servers/${serverId}`);
-      set((state) => {
-        const remaining = state.servers.filter(s => s.id !== serverId);
-        return {
-          servers: remaining,
-          activeServerId: remaining.length > 0 ? remaining[0].id : null,
-          activeChannelId: remaining.length > 0 && remaining[0].channels.length > 0 ? remaining[0].channels[0].id : null
-        };
-      });
     } catch (err: any) {
-      console.error('Failed to delete server', err);
-      throw err;
+      console.warn('Backend offline, deleting local server:', err);
     }
+    set((state) => {
+      const remaining = state.servers.filter(s => s.id !== serverId);
+      return {
+        servers: remaining,
+        activeServerId: remaining.length > 0 ? remaining[0].id : null,
+        activeChannelId: remaining.length > 0 && remaining[0].channels.length > 0 ? remaining[0].channels[0].id : null
+      };
+    });
   },
 
   createChannel: async (serverId: string, name: string, type = 'TEXT') => {
@@ -125,8 +181,25 @@ export const useServerStore = create<ServerState>((set, get) => ({
         activeChannelId: newChannel.id
       }));
     } catch (err: any) {
-      console.error('Failed to create channel', err);
-      throw err;
+      console.warn('Backend offline, creating local channel:', err);
+      const newChannel: Channel = {
+        id: 'ch-' + Date.now(),
+        name,
+        type,
+        serverId
+      };
+      set((state) => ({
+        servers: state.servers.map((server) => {
+          if (server.id === serverId) {
+            return {
+              ...server,
+              channels: [...server.channels, newChannel]
+            };
+          }
+          return server;
+        }),
+        activeChannelId: newChannel.id
+      }));
     }
   },
 
@@ -140,3 +213,4 @@ export const useServerStore = create<ServerState>((set, get) => ({
   },
   setActiveChannel: (id: string) => set({ activeChannelId: id }),
 }));
+
