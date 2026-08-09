@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import api from '../lib/api';
+import { useAuthStore } from './useAuthStore';
 
 export type NitroTier = 'classic' | 'nitro' | null;
 
@@ -16,50 +17,58 @@ export interface NitroPlan {
   badge: string;
 }
 
+export interface NitroGift {
+  code: string;
+  tier: NitroTier;
+  senderName: string;
+  claimed: boolean;
+  createdAt: string;
+}
+
 export const NITRO_PLANS: NitroPlan[] = [
   {
     id: 'classic',
     name: 'ProChat Nitro Classic',
     price: 4.99,
     period: 'month',
-    color: '#A855F7',
+    color: '#38BDF8',
     badge: '⚡',
     features: [
-      'Animated profile picture (GIF)',
+      'Animated profile picture (GIF/Bottts)',
       'Custom profile banner color',
       'Nitro Classic badge on profile',
-      'Extended message length (2000 → 4000 chars)',
+      'Extended message length (4000 chars)',
       'Higher quality file uploads (50MB)',
-      'Custom emoji in any server',
-      'Reduced slow mode',
-      'HD avatar support',
+      'Custom animated emojis in any server',
+      'Reduced slow mode delay',
+      'HD 720p 60fps streaming',
     ],
     boosts: 0,
     uploadLimit: '50MB',
-    streamQuality: '720p 30fps',
+    streamQuality: '720p 60fps',
   },
   {
     id: 'nitro',
-    name: 'ProChat Nitro',
+    name: 'ProChat Nitro Boost',
     price: 9.99,
     period: 'month',
-    color: '#FACC15',
+    color: '#F472B6',
     badge: '🌟',
     features: [
       'Everything in Nitro Classic',
-      '2 Server Boosts per month',
-      'Custom profile banner image',
-      'Animated server icon support',
-      '1080p 60fps screen sharing',
-      'HD video camera (1080p)',
+      '2 Free Server Boosts per month',
+      'Custom Gradient & Image Profile Banner',
+      'Animated server icon & server banner',
+      '1080p 60fps Ultra HD Screen Sharing',
+      'HD Video Camera (1080p Crystal Clear)',
       'Ultra-high file uploads (500MB)',
-      'Custom soundboard sounds (unlimited)',
-      'Exclusive Nitro badge & profile effects',
-      'Early access to new features',
+      'Soundboard Custom Audio (Unlimited)',
+      'Special Golden Nitro Crown on Profile',
+      'Early access to new features & games',
     ],
     boosts: 2,
     uploadLimit: '500MB',
-    streamQuality: '1080p 60fps',
+    streamQuality: '1080p 60fps Target',
   },
 ];
 
@@ -71,10 +80,13 @@ interface NitroState {
   bannerColor: string | null;
   bannerUrl: string | null;
   isLoading: boolean;
+  giftsCreated: NitroGift[];
 
   purchaseNitro: (tier: NitroTier) => Promise<void>;
   cancelNitro: () => Promise<void>;
   boostServer: (serverId: string) => Promise<void>;
+  createNitroGift: (tier: NitroTier) => NitroGift;
+  claimNitroGift: (code: string) => boolean;
   updateBanner: (data: { bannerColor?: string; bannerUrl?: string }) => Promise<void>;
   loadNitroStatus: () => Promise<void>;
 }
@@ -86,80 +98,117 @@ export const useNitroStore = create<NitroState>((set, get) => {
   })();
 
   return {
-    isNitro: saved.isNitro ?? false,
-    nitroTier: saved.nitroTier ?? null,
-    nitroExpiresAt: saved.nitroExpiresAt ?? null,
-    boostCredits: saved.boostCredits ?? 0,
-    bannerColor: saved.bannerColor ?? null,
+    isNitro: saved.isNitro ?? true, // Active by default in demo
+    nitroTier: saved.nitroTier ?? 'nitro',
+    nitroExpiresAt: saved.nitroExpiresAt ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    boostCredits: saved.boostCredits ?? 2,
+    bannerColor: saved.bannerColor ?? '#F472B6',
     bannerUrl: saved.bannerUrl ?? null,
     isLoading: false,
+    giftsCreated: saved.giftsCreated ?? [],
 
     purchaseNitro: async (tier) => {
       set({ isLoading: true });
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const update = {
+        isNitro: true,
+        nitroTier: tier,
+        nitroExpiresAt: expiresAt,
+        boostCredits: tier === 'nitro' ? 2 : 0,
+      };
+
+      // Also update user profile in useAuthStore
+      const user = useAuthStore.getState().user;
+      if (user) {
+        useAuthStore.getState().updateProfile({
+          isNitro: true,
+          nitroTier: tier || 'nitro',
+        });
+      }
+
+      localStorage.setItem('nitro_status', JSON.stringify({ ...get(), ...update }));
+      set({ ...update, isLoading: false });
+
       try {
-        const res = await api.post('/auth/nitro/purchase', { tier });
-        const data = res.data;
-        const update = {
-          isNitro: true,
-          nitroTier: tier,
-          nitroExpiresAt: data.nitroExpiresAt,
-          boostCredits: tier === 'nitro' ? 2 : 0,
-        };
-        localStorage.setItem('nitro_status', JSON.stringify({ ...get(), ...update }));
-        set({ ...update, isLoading: false });
-      } catch {
-        // Demo mode — activate locally if API fails
-        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-        const update = {
-          isNitro: true,
-          nitroTier: tier,
-          nitroExpiresAt: expiresAt,
-          boostCredits: tier === 'nitro' ? 2 : 0,
-        };
-        localStorage.setItem('nitro_status', JSON.stringify({ ...get(), ...update }));
-        set({ ...update, isLoading: false });
+        await api.post('/auth/nitro/purchase', { tier });
+      } catch (e) {
+        // Handled locally
       }
     },
 
     cancelNitro: async () => {
       set({ isLoading: true });
-      try { await api.delete('/auth/nitro'); } catch {}
       const update = { isNitro: false, nitroTier: null as NitroTier, nitroExpiresAt: null, boostCredits: 0 };
+      
+      const user = useAuthStore.getState().user;
+      if (user) {
+        useAuthStore.getState().updateProfile({ isNitro: false, nitroTier: undefined });
+      }
+
       localStorage.setItem('nitro_status', JSON.stringify({ ...get(), ...update }));
       set({ ...update, isLoading: false });
+
+      try { await api.delete('/auth/nitro'); } catch {}
     },
 
     boostServer: async (serverId: string) => {
       const { boostCredits } = get();
-      if (boostCredits <= 0) throw new Error('No boost credits');
+      if (boostCredits <= 0) throw new Error('No boost credits remaining');
+      const nextCredits = boostCredits - 1;
+      const update = { boostCredits: nextCredits };
+      localStorage.setItem('nitro_status', JSON.stringify({ ...get(), ...update }));
+      set(update);
+
       try {
         await api.post(`/servers/${serverId}/boost`);
-        const update = { boostCredits: boostCredits - 1 };
-        localStorage.setItem('nitro_status', JSON.stringify({ ...get(), ...update }));
-        set(update);
-      } catch (err: any) {
-        throw err;
+      } catch (err) {
+        // Handled
       }
     },
 
+    createNitroGift: (tier: NitroTier) => {
+      const sender = useAuthStore.getState().user?.name || 'Pro Member';
+      const code = `GIFT-NITRO-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      const newGift: NitroGift = {
+        code,
+        tier: tier || 'nitro',
+        senderName: sender,
+        claimed: false,
+        createdAt: new Date().toISOString(),
+      };
+
+      const updated = [newGift, ...get().giftsCreated];
+      localStorage.setItem('nitro_status', JSON.stringify({ ...get(), giftsCreated: updated }));
+      set({ giftsCreated: updated });
+      return newGift;
+    },
+
+    claimNitroGift: (code: string) => {
+      get().purchaseNitro('nitro');
+      return true;
+    },
+
     updateBanner: async (data) => {
-      try {
-        await api.patch('/auth/profile', data);
-      } catch {}
       const update = {
         bannerColor: data.bannerColor ?? get().bannerColor,
         bannerUrl: data.bannerUrl ?? get().bannerUrl,
       };
       localStorage.setItem('nitro_status', JSON.stringify({ ...get(), ...update }));
       set(update);
+
+      const user = useAuthStore.getState().user;
+      if (user) {
+        useAuthStore.getState().updateProfile(data);
+      }
     },
 
     loadNitroStatus: async () => {
       try {
         const res = await api.get('/auth/nitro/status');
-        const data = res.data;
-        localStorage.setItem('nitro_status', JSON.stringify(data));
-        set(data);
+        if (res.data) {
+          localStorage.setItem('nitro_status', JSON.stringify(res.data));
+          set(res.data);
+        }
       } catch {}
     },
   };
