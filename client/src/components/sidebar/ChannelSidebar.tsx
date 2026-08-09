@@ -7,6 +7,8 @@ import {
 import { useServerStore } from '../../store/useServerStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNitroStore } from '../../store/useNitroStore';
+import { useVoiceStore } from '../../store/useVoiceStore';
+
 import { CreateChannelModal } from '../modals/CreateChannelModal';
 import { UserSettingsModal } from '../modals/UserSettingsModal';
 import { ServerSettingsModal } from '../modals/ServerSettingsModal';
@@ -41,12 +43,11 @@ export const ChannelSidebar: React.FC = () => {
   const textChannels = activeServer?.channels?.filter(c => c.type === 'TEXT') || [];
   const voiceChannels = activeServer?.channels?.filter(c => c.type === 'VOICE') || [];
 
-  // Connected voice participants for General Voice (matching screenshot)
-  const voiceMembers = [
-    { name: user?.name || 'shivam', avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=shivam&backgroundColor=fbbf24', color: '#F59E0B' },
-    { name: 'harsh', avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=harshRobot&backgroundColor=fef08a', color: '#EAB308' },
-    { name: 'wanzxplays', avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=wanzxplays&backgroundColor=38bdf8', color: '#38BDF8' }
-  ];
+  const { peers } = useVoiceStore();
+
+  // Connected voice participants for Active Voice Channel (only actual connected peers)
+  const voiceMembers = Object.values(peers);
+
 
   return (
     <>

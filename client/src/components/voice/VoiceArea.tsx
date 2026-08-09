@@ -8,97 +8,52 @@ import {
 import { useServerStore } from '../../store/useServerStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNitroStore } from '../../store/useNitroStore';
-import { useSocket } from '../../hooks/useSocket';
+import { useVoiceStore } from '../../store/useVoiceStore';
 import cloudRelay from '../../lib/cloudRelay';
 import SoundboardPanel from './SoundboardPanel';
 import { NitroModal } from '../modals/NitroModal';
-import NitroBadge from '../ui/NitroBadge';
 import clsx from 'clsx';
-
-interface VoiceMember {
-  id: string;
-  name: string;
-  avatarUrl: string;
-  isMuted: boolean;
-  isSpeaking: boolean;
-  isCameraOn?: boolean;
-  isScreenSharing?: boolean;
-  isYou?: boolean;
-  color?: string;
-  hasCrown?: boolean;
-}
 
 export const VoiceArea: React.FC = () => {
   const { servers, activeServerId, activeChannelId, setActiveChannel } = useServerStore();
   const { user } = useAuthStore();
-  const { isNitro, nitroTier } = useNitroStore();
+  const { isNitro } = useNitroStore();
+  const { peers, joinVoiceChannel, leaveVoiceChannel, updateLocalState } = useVoiceStore();
 
   const [isMuted, setIsMuted] = useState(true);
   const [isDeafened, setIsDeafened] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isFocusMode, setIsFocusMode] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [isSoundboardOpen, setIsSoundboardOpen] = useState(false);
   const [incomingSound, setIncomingSound] = useState<any>(null);
   const [isNitroModalOpen, setIsNitroModalOpen] = useState(false);
-  const [speakingMap, setSpeakingMap] = useState<Record<string, boolean>>({
-    'harsh': true,
-  });
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
-  const screenContainerRef = useRef<HTMLDivElement | null>(null);
 
   const activeServer = servers.find(s => s.id === activeServerId) || servers[0];
   const activeChannel = activeServer?.channels.find(c => c.id === activeChannelId) || activeServer?.channels[0];
 
-  const socket = useSocket(activeChannelId || '');
-
-  // Simulate speaking pulses for dynamic feel
+  // Join voice channel presence when entering
   useEffect(() => {
-    const interval = setInterval(() => {
-      setSpeakingMap(prev => ({
-        ...prev,
-        'harsh': Math.random() > 0.3,
-        'wanzxplays': Math.random() > 0.7,
-      }));
-    }, 2500);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Voice Members matching the screenshot
-  const connectedMembers: VoiceMember[] = [
-    {
-      id: user?.id || 'me',
-      name: user?.name || 'shivam',
-      avatarUrl: user?.avatarUrl || 'https://api.dicebear.com/7.x/bottts/svg?seed=shivam&backgroundColor=fbbf24',
-      isMuted: isMuted,
-      isSpeaking: !isMuted,
-      isYou: true,
-      color: '#F59E0B',
-    },
-    {
-      id: 'mem-harsh',
-      name: 'harsh',
-      avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=harshRobot&backgroundColor=fef08a',
-      isMuted: false,
-      isSpeaking: speakingMap['harsh'] || false,
-      color: '#EAB308',
-    },
-    {
-      id: 'mem-wanzx',
-      name: 'wanzxplays',
-      avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=wanzxplays&backgroundColor=38bdf8',
-      isMuted: false,
-      isSpeaking: speakingMap['wanzxplays'] || false,
-      hasCrown: true,
-      color: '#38BDF8',
+    if (activeChannelId) {
+      joinVoiceChannel(activeChannelId, {
+        id: user?.id || 'usr-' + Date.now(),
+        name: user?.name || 'shivam',
+        avatarUrl: user?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${user?.name || 'shivam'}&backgroundColor=fbbf24`,
+      });
     }
-  ];
+
+    return () => {
+      leaveVoiceChannel();
+    };
+  }, [activeChannelId, user?.id, user?.name, user?.avatarUrl, joinVoiceChannel, leaveVoiceChannel]);
+
+  // Actual connected members list from real-time presence (NO FAKE / DUMMY IMAGES)
+  const connectedList = Object.values(peers);
 
   // Camera handling
   useEffect(() => {
@@ -111,11 +66,13 @@ export const VoiceArea: React.FC = () => {
             localVideoRef.current.play().catch(e => console.error(e));
           }
           setStreamError(null);
+          updateLocalState({ isCameraOn: true });
         })
         .catch((err) => {
           console.error('Camera error:', err);
           setStreamError('Could not access camera. Please check permissions.');
           setIsCameraOn(false);
+          updateLocalState({ isCameraOn: false });
         });
     } else {
       if (localStreamRef.current) {
@@ -125,6 +82,7 @@ export const VoiceArea: React.FC = () => {
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = null;
       }
+      updateLocalState({ isCameraOn: false });
     }
 
     return () => {
@@ -145,7 +103,7 @@ export const VoiceArea: React.FC = () => {
         screenVideoRef.current.srcObject = null;
       }
       setIsScreenSharing(false);
-      setIsFocusMode(false);
+      updateLocalState({ isScreenSharing: false });
     } else {
       try {
         const displayStream = await navigator.mediaDevices.getDisplayMedia({
@@ -155,10 +113,11 @@ export const VoiceArea: React.FC = () => {
         screenStreamRef.current = displayStream;
         setIsScreenSharing(true);
         setStreamError(null);
+        updateLocalState({ isScreenSharing: true });
 
         displayStream.getVideoTracks()[0].onended = () => {
           setIsScreenSharing(false);
-          setIsFocusMode(false);
+          updateLocalState({ isScreenSharing: false });
           if (screenStreamRef.current) {
             screenStreamRef.current.getTracks().forEach(track => track.stop());
             screenStreamRef.current = null;
@@ -204,16 +163,20 @@ export const VoiceArea: React.FC = () => {
   }, [activeChannelId]);
 
   const toggleMute = () => {
-    setIsMuted(!isMuted);
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+    updateLocalState({ isMuted: nextMuted, isSpeaking: !nextMuted });
+
     if (localStreamRef.current) {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
       if (audioTrack) {
-        audioTrack.enabled = isMuted;
+        audioTrack.enabled = !nextMuted;
       }
     }
   };
 
   const handleDisconnect = () => {
+    leaveVoiceChannel();
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
     }
@@ -228,14 +191,14 @@ export const VoiceArea: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col bg-[#0B0E14] h-full min-w-0 overflow-hidden select-none">
-      {/* Top Header Bar (Matching Screenshot) */}
+      {/* Top Header Bar */}
       <div className="h-14 border-b border-[#181D2A] px-6 flex items-center justify-between shrink-0 bg-[#0E121B]">
-        {/* Left: Channel Name & Connected Pill */}
+        {/* Left: Channel Name & Dynamic Connected Count */}
         <div className="flex items-center space-x-3">
           <Volume2 size={20} className="text-cyan-400 shrink-0" />
           <span className="text-white font-black text-base tracking-tight">{activeChannel?.name || 'General Voice'}</span>
           <div className="flex items-center px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-emerald-400 text-xs font-bold shadow-sm">
-            <span>{connectedMembers.length} Connected</span>
+            <span>{connectedList.length} Connected</span>
           </div>
         </div>
 
@@ -248,7 +211,7 @@ export const VoiceArea: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Voice Stage (Big Animated Characters) */}
+      {/* Main Voice Stage (ONLY REAL CONNECTED MEMBERS) */}
       <div className="flex-1 p-6 flex flex-col items-center justify-center overflow-y-auto custom-scrollbar relative">
         {streamError && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 flex items-center px-4 py-2 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold rounded-xl shadow-lg">
@@ -287,21 +250,23 @@ export const VoiceArea: React.FC = () => {
           </div>
         )}
 
-        {/* Voice Character Cards Grid */}
-        <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 place-items-stretch">
-          {connectedMembers.map((member) => (
+        {/* Voice Character Cards Grid (Only Render Real Connected People) */}
+        <div className={clsx(
+          "w-full max-w-5xl grid gap-6 place-items-stretch",
+          connectedList.length === 1 ? "grid-cols-1 max-w-md" : connectedList.length === 2 ? "grid-cols-1 md:grid-cols-2 max-w-3xl" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+        )}>
+          {connectedList.map((member) => (
             <div
               key={member.id}
               className={clsx(
-                "h-64 bg-[#111522] rounded-3xl border p-6 flex flex-col items-center justify-between relative shadow-xl transition-all duration-300 group",
+                "h-64 bg-[#111522] rounded-3xl border p-6 flex flex-col items-center justify-between relative shadow-xl transition-all duration-300 group animate-scale-up",
                 member.isSpeaking
                   ? "border-cyan-400/80 ring-2 ring-cyan-400/30 shadow-cyan-500/10 scale-[1.01]"
                   : "border-[#1D2538] hover:border-pink-400/40"
               )}
             >
-              {/* Top Crown indicator if owner */}
               <div className="w-full flex justify-end">
-                {member.hasCrown && (
+                {member.name.toLowerCase().includes('wanzx') && (
                   <div className="text-yellow-400 text-xs flex items-center gap-1 font-bold">
                     <Crown size={14} className="fill-yellow-400" />
                   </div>
@@ -365,7 +330,7 @@ export const VoiceArea: React.FC = () => {
           incomingSound={incomingSound}
         />
 
-        {/* Bottom Action Bar (Matching Screenshot Exactly) */}
+        {/* Bottom Action Bar */}
         <div className="h-22 bg-[#0E121B] border-t border-[#181D2A] px-8 flex items-center justify-between shrink-0 shadow-2xl">
           {/* Left / Center Control Buttons */}
           <div className="flex items-center space-x-3.5">
@@ -397,7 +362,7 @@ export const VoiceArea: React.FC = () => {
               {isDeafened ? <VolumeX size={20} /> : <Headphones size={20} />}
             </button>
 
-            {/* 🎙️ Soundboard Button (Cyan Pill) */}
+            {/* 🎙️ Soundboard Button */}
             <button
               onClick={() => setIsSoundboardOpen(prev => !prev)}
               className={clsx(
@@ -421,7 +386,7 @@ export const VoiceArea: React.FC = () => {
             </button>
           </div>
 
-          {/* Right: Bright Share Screen Button */}
+          {/* Right: Share Screen Button */}
           <div className="flex items-center space-x-3">
             <button
               onClick={toggleScreenShare}
