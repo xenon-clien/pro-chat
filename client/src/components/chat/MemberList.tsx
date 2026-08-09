@@ -62,9 +62,10 @@ export const MemberList: React.FC<MemberListProps> = () => {
                   <span className="text-xs font-bold text-gray-200 group-hover:text-cyan-300 transition-colors truncate">
                     {member.name}
                   </span>
-                  {member.name.toLowerCase().includes('wanzx') && (
-                    <Crown size={13} className="text-amber-400 fill-amber-400 shrink-0 ml-0.5" />
+                  {member.isYou && (
+                    <span className="text-[10px] bg-pink-500/20 text-pink-400 font-bold px-1.5 py-0.2 rounded">YOU</span>
                   )}
+
                 </div>
               </div>
             </div>

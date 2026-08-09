@@ -266,12 +266,13 @@ export const VoiceArea: React.FC = () => {
               )}
             >
               <div className="w-full flex justify-end">
-                {member.name.toLowerCase().includes('wanzx') && (
-                  <div className="text-yellow-400 text-xs flex items-center gap-1 font-bold">
-                    <Crown size={14} className="fill-yellow-400" />
-                  </div>
+                {member.isYou && (
+                  <span className="text-[10px] bg-pink-500/20 text-pink-400 font-bold px-2 py-0.5 rounded-full uppercase">
+                    YOU
+                  </span>
                 )}
               </div>
+
 
               {/* Central Big Animated Character */}
               <div className="relative flex items-center justify-center my-auto">
