@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import api from '../lib/api';
 import cloudRelay from '../lib/cloudRelay';
+import { useServerStore } from './useServerStore';
 
 export interface Message {
   id: string;
@@ -29,7 +30,7 @@ const SEED_MESSAGES: Record<string, Message[]> = {
   'ch-general': [
     {
       id: 'msg-1',
-      content: 'Welcome to ProChat! 🚀 Global real-time messaging, Discord Nitro, Soundboard, and HD Voice Channels are ready.',
+      content: 'Welcome to ProChat! 🚀 Global real-time messaging is active. Send your invite code to friends and chat instantly!',
       createdAt: new Date(Date.now() - 3600000).toISOString(),
       author: {
         id: 'bot-admin',
@@ -38,17 +39,6 @@ const SEED_MESSAGES: Record<string, Message[]> = {
       },
       channelId: 'ch-general'
     },
-    {
-      id: 'msg-2',
-      content: 'Global internet sync is active! Send your link to any friend on any phone or laptop and start chatting in real time.',
-      createdAt: new Date(Date.now() - 1800000).toISOString(),
-      author: {
-        id: 'bot-moderator',
-        name: 'Community Mod',
-        avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=NeonGamer',
-      },
-      channelId: 'ch-general'
-    }
   ]
 };
 
@@ -59,18 +49,33 @@ const playNotificationChime = () => {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-    osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // A5
+    osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15);
     gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
     osc.connect(gain);
     gain.connect(audioCtx.destination);
     osc.start();
     osc.stop(audioCtx.currentTime + 0.2);
-  } catch (e) {
-    // Ignore audio context errors
-  }
+  } catch (e) {}
 };
+
+/**
+ * Returns a globally-shared MQTT topic based on the server's inviteCode.
+ * This ensures User A (creator) and User B (joiner) always share the SAME topic,
+ * regardless of their local channelId.
+ */
+function getSharedTopic(channelId: string): string {
+  try {
+    const { servers, activeServerId } = useServerStore.getState();
+    const activeServer = servers.find(s => s.id === activeServerId);
+    if (activeServer?.inviteCode) {
+      const channelType = channelId.toLowerCase().includes('voice') ? 'voice' : 'text';
+      return `prochat/v1/server/${activeServer.inviteCode.toUpperCase()}/${channelType}`;
+    }
+  } catch (e) {}
+  return `prochat/v1/channel/${channelId}`;
+}
 
 let currentUnsub: (() => void) | null = null;
 
@@ -80,36 +85,34 @@ export const useMessageStore = create<MessageState>((set, get) => {
     isLoading: false,
     error: null,
     activeChannelId: 'ch-general',
-    
+
     fetchMessages: async (channelId: string) => {
       set({ isLoading: true, error: null, activeChannelId: channelId });
 
-      // Unsubscribe from previous channel if any
+      // Unsubscribe from previous channel
       if (currentUnsub) {
         currentUnsub();
         currentUnsub = null;
       }
 
-      // Subscribe to global real-time cloud relay for this channel
-      const topic = `prochat/v1/channel/${channelId}`;
+      // Subscribe to the shared invite-code-based MQTT topic
+      const topic = getSharedTopic(channelId);
       currentUnsub = cloudRelay.subscribe(topic, (_, data) => {
         if (data && data.id) {
           const current = get().messages;
           if (!current.find((m) => m.id === data.id)) {
-            set({ messages: [data, ...current] });
+            set({ messages: [...current, data] });
             playNotificationChime();
           }
         }
       });
 
-      // Load persistent shared messages from localStorage
-      const storedKey = `prochat_channel_msgs_${channelId}`;
+      // Load persistent messages from localStorage using shared topic key
+      const storedKey = `prochat_msgs_${topic.replace(/\//g, '_')}`;
       let localSaved: Message[] = [];
       try {
         const raw = localStorage.getItem(storedKey);
-        if (raw) {
-          localSaved = JSON.parse(raw);
-        }
+        if (raw) localSaved = JSON.parse(raw);
       } catch (e) {
         localSaved = [];
       }
@@ -121,38 +124,33 @@ export const useMessageStore = create<MessageState>((set, get) => {
           return;
         }
       } catch (err: any) {
-        // Backend offline fallback
+        // Backend offline — use local fallback
       }
 
-      const combined = [
-        ...localSaved,
-        ...(SEED_MESSAGES[channelId] || [])
-      ];
+      const seedForChannel = SEED_MESSAGES[channelId] || [];
+      const combined = [...localSaved, ...seedForChannel];
 
-      // Remove duplicates by ID
+      // Deduplicate by ID
       const uniqueMap = new Map<string, Message>();
       combined.forEach((m) => uniqueMap.set(m.id, m));
-      const uniqueMessages = Array.from(uniqueMap.values());
 
-      set({ messages: uniqueMessages, isLoading: false, error: null });
+      set({ messages: Array.from(uniqueMap.values()), isLoading: false, error: null });
     },
 
     addMessage: (message: Message) => {
-      const currentMessages = get().messages;
-      if (!currentMessages.find(m => m.id === message.id)) {
-        const updated = [message, ...currentMessages];
-        set({ messages: updated });
+      const current = get().messages;
+      if (!current.find(m => m.id === message.id)) {
+        set({ messages: [...current, message] });
 
-        // Persist to local storage for this channel
+        // Persist with shared topic key
         try {
-          const storedKey = `prochat_channel_msgs_${message.channelId}`;
-          const current = JSON.parse(localStorage.getItem(storedKey) || '[]');
-          if (!current.find((m: Message) => m.id === message.id)) {
-            localStorage.setItem(storedKey, JSON.stringify([message, ...current]));
+          const topic = getSharedTopic(message.channelId);
+          const storedKey = `prochat_msgs_${topic.replace(/\//g, '_')}`;
+          const saved = JSON.parse(localStorage.getItem(storedKey) || '[]');
+          if (!saved.find((m: Message) => m.id === message.id)) {
+            localStorage.setItem(storedKey, JSON.stringify([...saved, message]));
           }
-        } catch (e) {
-          // ignore
-        }
+        } catch (e) {}
       }
     },
 
@@ -167,22 +165,20 @@ export const useMessageStore = create<MessageState>((set, get) => {
           name: currentUser.name || 'Pro Member',
           avatarUrl: currentUser.avatarUrl || 'https://api.dicebear.com/7.x/bottts/svg?seed=Pro',
         },
-        channelId
+        channelId,
       };
-      
+
       // 1. Add locally
       get().addMessage(localMsg);
 
-      // 2. Publish to Global Cloud Realtime Relay (reaches all friends globally on any phone/PC)
-      const topic = `prochat/v1/channel/${channelId}`;
+      // 2. Publish on shared MQTT topic — reaches ALL friends in same server
+      const topic = getSharedTopic(channelId);
       cloudRelay.publish(topic, localMsg);
 
-      // 3. Post to backend API if live
+      // 3. Try backend
       try {
         await api.post(`/messages/${channelId}`, { content });
-      } catch (err: any) {
-        // Handled smoothly
-      }
-    }
+      } catch (err: any) {}
+    },
   };
 });
