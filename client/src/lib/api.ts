@@ -55,6 +55,21 @@ api.interceptors.response.use(
         return { data: updated, status: 200, statusText: 'OK', headers: {}, config: error.config };
       }
 
+      if (url.includes('/servers/join')) {
+        const inviteCode = data.inviteCode || 'PRO-HQ-8821';
+        const joinedServer = {
+          id: 'server-' + inviteCode.toLowerCase(),
+          name: inviteCode.includes('GAME') ? 'Gaming Hub Guild' : 'Pro Chat Community',
+          iconUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${inviteCode}`,
+          inviteCode: inviteCode,
+          channels: [
+            { id: 'ch-gen-join', name: 'general', type: 'TEXT', serverId: 'server-' + inviteCode.toLowerCase() },
+            { id: 'ch-voice-join', name: 'Voice Hangout', type: 'VOICE', serverId: 'server-' + inviteCode.toLowerCase() },
+          ]
+        };
+        return { data: joinedServer, status: 200, statusText: 'OK', headers: {}, config: error.config };
+      }
+
       if (url.includes('/servers/init')) {
         const defaultServers = [
           {
@@ -64,6 +79,7 @@ api.interceptors.response.use(
               name: 'Pro Chat HQ',
               iconUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=ProChat',
               ownerId: 'demo-user',
+              inviteCode: 'PRO-HQ-8821',
               channels: [
                 { id: 'ch-general', name: 'general', type: 'TEXT', serverId: 'pro-chat-hq' },
                 { id: 'ch-lounge', name: 'lounge', type: 'TEXT', serverId: 'pro-chat-hq' },
@@ -76,6 +92,7 @@ api.interceptors.response.use(
         ];
         return { data: defaultServers, status: 200, statusText: 'OK', headers: {}, config: error.config };
       }
+
 
       if (url.includes('/messages/')) {
         if (method === 'post') {

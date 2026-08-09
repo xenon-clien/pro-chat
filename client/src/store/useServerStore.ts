@@ -14,6 +14,7 @@ export interface Server {
   name: string;
   iconUrl?: string;
   ownerId?: string;
+  inviteCode?: string;
   channels: Channel[];
 }
 
@@ -31,6 +32,7 @@ interface ServerState {
   error: string | null;
   fetchServers: () => Promise<void>;
   createServer: (name: string) => Promise<void>;
+  joinServerByCode: (code: string) => Promise<Server>;
   updateServer: (serverId: string, data: { name?: string; iconUrl?: string }) => Promise<Server>;
   deleteServer: (serverId: string) => Promise<void>;
   createChannel: (serverId: string, name: string, type?: string) => Promise<void>;
@@ -43,6 +45,7 @@ const DEFAULT_SERVERS: Server[] = [
     id: 'pro-chat-hq',
     name: 'Pro Chat HQ',
     iconUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=ProChat',
+    inviteCode: 'PRO-HQ-8821',
     channels: [
       { id: 'ch-general', name: 'general', type: 'TEXT', serverId: 'pro-chat-hq' },
       { id: 'ch-lounge', name: 'lounge', type: 'TEXT', serverId: 'pro-chat-hq' },
@@ -55,12 +58,14 @@ const DEFAULT_SERVERS: Server[] = [
     id: 'gaming-zone',
     name: 'Gaming Hub',
     iconUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=GamingZone',
+    inviteCode: 'GAME-7799',
     channels: [
       { id: 'ch-gaming-chat', name: 'chat', type: 'TEXT', serverId: 'gaming-zone' },
       { id: 'ch-gaming-voice', name: 'Squad Voice', type: 'VOICE', serverId: 'gaming-zone' },
     ]
   }
 ];
+
 
 export const useServerStore = create<ServerState>((set, get) => ({
   servers: DEFAULT_SERVERS,
@@ -123,6 +128,55 @@ export const useServerStore = create<ServerState>((set, get) => ({
       }));
     }
   },
+
+  joinServerByCode: async (rawCode: string) => {
+    const code = rawCode.trim().toUpperCase().replace(/^HTTPS?:\/\/[^/]+\/INVITE\//, '').replace(/^PROCHAT\.GG\//, '');
+    const state = get();
+
+    // Check if user is already in server with this invite code
+    const existing = state.servers.find(s => s.inviteCode?.toUpperCase() === code || s.id.toUpperCase() === code);
+    if (existing) {
+      set({
+        activeServerId: existing.id,
+        activeChannelId: existing.channels.length > 0 ? existing.channels[0].id : null,
+      });
+      return existing;
+    }
+
+    try {
+      const response = await api.post('/servers/join', { inviteCode: code });
+      const joinedServer = response.data;
+      set((s) => ({
+        servers: [...s.servers, joinedServer],
+        activeServerId: joinedServer.id,
+        activeChannelId: joinedServer.channels.length > 0 ? joinedServer.channels[0].id : null,
+      }));
+      return joinedServer;
+    } catch (err: any) {
+      console.warn('Backend server join fallback active:', err);
+      // Create joined server representation from code
+      const serverId = 'joined-' + code.toLowerCase();
+      const serverName = code.includes('HQ') ? 'Pro Chat Community' : `Guild [${code}]`;
+      const newJoinedServer: Server = {
+        id: serverId,
+        name: serverName,
+        iconUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${code}`,
+        inviteCode: code,
+        channels: [
+          { id: 'ch-gen-' + serverId, name: 'general', type: 'TEXT', serverId },
+          { id: 'ch-lounge-' + serverId, name: 'lounge', type: 'TEXT', serverId },
+          { id: 'ch-voice-' + serverId, name: 'Voice Hangout', type: 'VOICE', serverId },
+        ]
+      };
+      set((s) => ({
+        servers: [...s.servers, newJoinedServer],
+        activeServerId: newJoinedServer.id,
+        activeChannelId: newJoinedServer.channels[0].id,
+      }));
+      return newJoinedServer;
+    }
+  },
+
 
   updateServer: async (serverId: string, data: { name?: string; iconUrl?: string }) => {
     try {

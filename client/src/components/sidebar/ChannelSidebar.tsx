@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Hash, Volume2, ChevronDown, Settings, Mic, MicOff, Headphones, VolumeX, Plus, UserPlus, Shield, Crown, Zap, Users, MessageSquare } from 'lucide-react';
+import { Hash, Volume2, ChevronDown, Settings, Mic, MicOff, Headphones, VolumeX, Plus, UserPlus, Shield, Crown, Zap, Users, MessageSquare, Share2 } from 'lucide-react';
 import { useServerStore } from '../../store/useServerStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNitroStore } from '../../store/useNitroStore';
 import { CreateChannelModal } from '../modals/CreateChannelModal';
 import { UserSettingsModal } from '../modals/UserSettingsModal';
 import { ServerSettingsModal } from '../modals/ServerSettingsModal';
+import { InviteModal } from '../modals/InviteModal';
 import { NitroModal } from '../modals/NitroModal';
 import NitroBadge from '../ui/NitroBadge';
 import DiscordNotificationBadge from '../ui/DiscordNotificationBadge';
@@ -56,6 +57,7 @@ const ChannelSidebar = () => {
   const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isServerSettingsOpen, setIsServerSettingsOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNitroModalOpen, setIsNitroModalOpen] = useState(false);
   const [activeDmId, setActiveDmId] = useState<string | null>(null);
@@ -89,19 +91,46 @@ const ChannelSidebar = () => {
               )}
               <h1 className="font-extrabold text-white truncate text-sm tracking-tight">{activeServer?.name}</h1>
             </div>
-            <ChevronDown size={18} className={clsx("text-yellow-400 transition-transform duration-200 shrink-0", isDropdownOpen && "rotate-180")} />
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsInviteModalOpen(true);
+                }}
+                className="text-yellow-400 hover:bg-yellow-400/20 p-1 rounded-md transition-colors"
+                title="Invite People"
+              >
+                <UserPlus size={15} />
+              </button>
+              <ChevronDown size={17} className={clsx("text-gray-400 transition-transform duration-200 shrink-0", isDropdownOpen && "rotate-180")} />
+            </div>
           </div>
         )}
 
         {/* Server Actions Dropdown */}
         {isDropdownOpen && activeServer && (
           <div className="absolute top-14 left-2 right-2 bg-[#121418] border border-yellow-400/30 rounded-xl shadow-2xl p-1.5 z-50 space-y-1 animate-scale-up">
+            {/* Invite People Button */}
+            <button
+              onClick={() => {
+                setIsDropdownOpen(false);
+                setIsInviteModalOpen(true);
+              }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm bg-yellow-400/10 hover:bg-yellow-400 text-yellow-400 hover:text-black font-extrabold transition-all cursor-pointer shadow-sm"
+            >
+              <div className="flex items-center space-x-2">
+                <UserPlus size={16} />
+                <span>Invite People</span>
+              </div>
+              <span className="text-[10px] bg-yellow-400 text-black px-1.5 py-0.2 rounded font-black">CODE</span>
+            </button>
+
             <button
               onClick={() => {
                 setIsDropdownOpen(false);
                 setIsChannelModalOpen(true);
               }}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm text-yellow-400 hover:bg-yellow-400 hover:text-black font-bold transition-colors cursor-pointer"
+              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-[#1c1e24] hover:text-yellow-400 font-bold transition-colors cursor-pointer"
             >
               <span>Create Channel</span>
               <Plus size={16} />
@@ -121,6 +150,7 @@ const ChannelSidebar = () => {
             </button>
           </div>
         )}
+
 
         {/* Navigation Content */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-3">
@@ -416,11 +446,19 @@ const ChannelSidebar = () => {
         />
       )}
 
+      <InviteModal
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
+        serverName={activeServer?.name || 'Pro Chat HQ'}
+        inviteCode={activeServer?.inviteCode || 'PRO-HQ-8821'}
+      />
+
       <NitroModal
         isOpen={isNitroModalOpen}
         onClose={() => setIsNitroModalOpen(false)}
       />
     </>
+
 
   );
 };
