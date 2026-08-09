@@ -167,14 +167,35 @@ export const useServerStore = create<ServerState>((set, get) => {
     },
 
     joinServerByCode: async (rawCodeOrName: string) => {
-      const query = rawCodeOrName.trim().toUpperCase().replace(/^HTTPS?:\/\/[^/]+\/INVITE\//, '').replace(/^PROCHAT\.GG\//, '');
+      let code = rawCodeOrName.trim();
+      
+      // Extract code if user pasted a full URL
+      try {
+        if (code.includes('http://') || code.includes('https://') || code.includes('?join=') || code.includes('?invite=')) {
+          const urlObj = new URL(code.startsWith('http') ? code : `https://${code}`);
+          const paramCode = urlObj.searchParams.get('join') || urlObj.searchParams.get('invite');
+          if (paramCode) {
+            code = paramCode;
+          } else {
+            const pathParts = urlObj.pathname.split('/').filter(Boolean);
+            if (pathParts.length > 0) {
+              code = pathParts[pathParts.length - 1];
+            }
+          }
+        }
+      } catch (e) {
+        // use raw
+      }
+
+      // Clean query string
+      const cleanCode = code.trim().toUpperCase().replace(/^JOIN-/, '');
       const state = get();
 
       // 1. Check if user already joined this server
       const existingInUser = state.servers.find(
-        s => s.inviteCode?.toUpperCase() === query || 
-             s.name.toUpperCase() === query || 
-             s.id.toUpperCase() === query
+        s => s.inviteCode?.toUpperCase() === cleanCode || 
+             s.name.toUpperCase() === cleanCode || 
+             s.id.toUpperCase() === cleanCode
       );
       if (existingInUser) {
         set({
@@ -186,19 +207,20 @@ export const useServerStore = create<ServerState>((set, get) => {
 
       // 2. Check in public directory (servers created by others)
       const inDirectory = state.publicDirectory.find(
-        s => s.inviteCode?.toUpperCase() === query || 
-             s.name.toUpperCase().includes(query) ||
-             query.includes(s.name.toUpperCase())
+        s => s.inviteCode?.toUpperCase() === cleanCode || 
+             s.name.toUpperCase() === cleanCode ||
+             s.name.toUpperCase().includes(cleanCode) ||
+             cleanCode.includes(s.name.toUpperCase())
       );
 
       const serverToJoin: Server = inDirectory || {
-        id: 'joined-' + query.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-        name: rawCodeOrName.trim(),
-        iconUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(rawCodeOrName)}`,
-        inviteCode: query.includes('-') ? query : `JOIN-${query}`,
+        id: 'joined-' + cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        name: cleanCode.includes('-') ? `Squad ${cleanCode}` : cleanCode,
+        iconUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(cleanCode)}`,
+        inviteCode: cleanCode,
         channels: [
-          { id: 'ch-gen-' + query.toLowerCase(), name: 'general', type: 'TEXT', serverId: 'joined-' + query.toLowerCase() },
-          { id: 'ch-voice-' + query.toLowerCase(), name: 'General Voice', type: 'VOICE', serverId: 'joined-' + query.toLowerCase() },
+          { id: 'ch-gen-' + cleanCode.toLowerCase(), name: 'general', type: 'TEXT', serverId: 'joined-' + cleanCode.toLowerCase() },
+          { id: 'ch-voice-' + cleanCode.toLowerCase(), name: 'General Voice', type: 'VOICE', serverId: 'joined-' + cleanCode.toLowerCase() },
         ]
       };
 
@@ -211,8 +233,9 @@ export const useServerStore = create<ServerState>((set, get) => {
         activeChannelId: serverToJoin.channels[0].id,
       });
 
+
       try {
-        await api.post('/servers/join', { inviteCode: query });
+        await api.post('/servers/join', { inviteCode: cleanCode });
       } catch (err) {
         // Handled
       }
