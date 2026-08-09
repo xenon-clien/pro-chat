@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import api from '../lib/api';
+import cloudRelay from '../lib/cloudRelay';
 
 export interface Message {
   id: string;
@@ -17,6 +18,7 @@ interface MessageState {
   messages: Message[];
   isLoading: boolean;
   error: string | null;
+  activeChannelId: string | null;
   fetchMessages: (channelId: string) => Promise<void>;
   addMessage: (message: Message) => void;
   sendMessage: (channelId: string, content: string) => Promise<void>;
@@ -27,7 +29,7 @@ const SEED_MESSAGES: Record<string, Message[]> = {
   'ch-general': [
     {
       id: 'msg-1',
-      content: 'Welcome to ProChat! 🚀 Real-time messaging, Discord Nitro, Soundboard, and HD Voice Channels are ready.',
+      content: 'Welcome to ProChat! 🚀 Global real-time messaging, Discord Nitro, Soundboard, and HD Voice Channels are ready.',
       createdAt: new Date(Date.now() - 3600000).toISOString(),
       author: {
         id: 'bot-admin',
@@ -38,7 +40,7 @@ const SEED_MESSAGES: Record<string, Message[]> = {
     },
     {
       id: 'msg-2',
-      content: 'Multi-user sync is enabled! Open another tab or window with a different account and start chatting in real time.',
+      content: 'Global internet sync is active! Send your link to any friend on any phone or laptop and start chatting in real time.',
       createdAt: new Date(Date.now() - 1800000).toISOString(),
       author: {
         id: 'bot-moderator',
@@ -50,17 +52,7 @@ const SEED_MESSAGES: Record<string, Message[]> = {
   ]
 };
 
-// Cross-tab real-time communication channel
-let syncChannel: BroadcastChannel | null = null;
-try {
-  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-    syncChannel = new BroadcastChannel('pro_chat_realtime_sync');
-  }
-} catch (e) {
-  console.warn('BroadcastChannel not supported');
-}
-
-// Play notification sound
+// Play audio notification chime
 const playNotificationChime = () => {
   try {
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -80,49 +72,35 @@ const playNotificationChime = () => {
   }
 };
 
+let currentUnsub: (() => void) | null = null;
+
 export const useMessageStore = create<MessageState>((set, get) => {
-  // Listen for real-time messages from other open tabs/windows
-  if (syncChannel) {
-    syncChannel.onmessage = (event) => {
-      const data = event.data;
-      if (data && data.type === 'NEW_MESSAGE' && data.message) {
-        const currentMessages = get().messages;
-        const msg = data.message;
-        if (!currentMessages.find((m) => m.id === msg.id)) {
-          set({ messages: [msg, ...currentMessages] });
-          playNotificationChime();
-        }
-      }
-    };
-  }
-
-  // Also listen for storage events as backup across windows
-  if (typeof window !== 'undefined') {
-    window.addEventListener('storage', (event) => {
-      if (event.key && event.key.startsWith('prochat_sync_msg_')) {
-        try {
-          const msg = JSON.parse(event.newValue || '{}');
-          if (msg && msg.id) {
-            const currentMessages = get().messages;
-            if (!currentMessages.find((m) => m.id === msg.id)) {
-              set({ messages: [msg, ...currentMessages] });
-              playNotificationChime();
-            }
-          }
-        } catch (e) {
-          // ignore
-        }
-      }
-    });
-  }
-
   return {
     messages: SEED_MESSAGES['ch-general'] || [],
     isLoading: false,
     error: null,
+    activeChannelId: 'ch-general',
     
     fetchMessages: async (channelId: string) => {
-      set({ isLoading: true, error: null });
+      set({ isLoading: true, error: null, activeChannelId: channelId });
+
+      // Unsubscribe from previous channel if any
+      if (currentUnsub) {
+        currentUnsub();
+        currentUnsub = null;
+      }
+
+      // Subscribe to global real-time cloud relay for this channel
+      const topic = `prochat/v1/channel/${channelId}`;
+      currentUnsub = cloudRelay.subscribe(topic, (_, data) => {
+        if (data && data.id) {
+          const current = get().messages;
+          if (!current.find((m) => m.id === data.id)) {
+            set({ messages: [data, ...current] });
+            playNotificationChime();
+          }
+        }
+      });
 
       // Load persistent shared messages from localStorage
       const storedKey = `prochat_channel_msgs_${channelId}`;
@@ -195,21 +173,11 @@ export const useMessageStore = create<MessageState>((set, get) => {
       // 1. Add locally
       get().addMessage(localMsg);
 
-      // 2. Broadcast in real time to all other tabs / browser windows
-      if (syncChannel) {
-        syncChannel.postMessage({ type: 'NEW_MESSAGE', message: localMsg });
-      }
+      // 2. Publish to Global Cloud Realtime Relay (reaches all friends globally on any phone/PC)
+      const topic = `prochat/v1/channel/${channelId}`;
+      cloudRelay.publish(topic, localMsg);
 
-      // 3. Trigger storage event for cross-browser / cross-window sync
-      try {
-        localStorage.setItem(`prochat_sync_msg_${channelId}`, JSON.stringify(localMsg));
-        // Remove item after trigger so subsequent sends re-trigger storage event
-        setTimeout(() => localStorage.removeItem(`prochat_sync_msg_${channelId}`), 500);
-      } catch (e) {
-        // ignore
-      }
-
-      // 4. Try posting to backend API if live
+      // 3. Post to backend API if live
       try {
         await api.post(`/messages/${channelId}`, { content });
       } catch (err: any) {

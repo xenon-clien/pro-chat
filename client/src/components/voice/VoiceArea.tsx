@@ -8,7 +8,9 @@ import { useServerStore } from '../../store/useServerStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNitroStore } from '../../store/useNitroStore';
 import { useSocket } from '../../hooks/useSocket';
+import cloudRelay from '../../lib/cloudRelay';
 import SoundboardPanel from './SoundboardPanel';
+
 import { NitroModal } from '../modals/NitroModal';
 import NitroBadge from '../ui/NitroBadge';
 import clsx from 'clsx';
@@ -136,28 +138,58 @@ export const VoiceArea: React.FC = () => {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Listen for incoming soundboard events from other users
+  // Listen for incoming soundboard events from other users globally
   useEffect(() => {
-    if (!socket) return;
+    if (!activeChannelId) return;
+
+    // 1. Socket.io handler (if local/backend socket is connected)
     const handleIncomingSound = (data: any) => {
       setIncomingSound(data);
       setTimeout(() => setIncomingSound(null), 100);
     };
-    socket.on('soundboard:incoming', handleIncomingSound);
-    return () => { socket.off('soundboard:incoming', handleIncomingSound); };
-  }, [socket]);
+    if (socket) {
+      socket.on('soundboard:incoming', handleIncomingSound);
+    }
 
-  // Broadcast soundboard sound via socket
+    // 2. Global Cloud Relay handler (works over public internet on Vercel)
+    const voiceTopic = `prochat/v1/voice/${activeChannelId}`;
+    const unsub = cloudRelay.subscribe(voiceTopic, (_, data) => {
+      if (data && data.type === 'SOUNDBOARD' && data.sound) {
+        setIncomingSound(data.sound);
+        setTimeout(() => setIncomingSound(null), 100);
+      }
+    });
+
+    return () => { 
+      if (socket) socket.off('soundboard:incoming', handleIncomingSound);
+      unsub();
+    };
+  }, [socket, activeChannelId]);
+
+  // Broadcast soundboard sound via cloudRelay and socket
   const handlePlaySound = useCallback((sound: any) => {
-    if (!socket || !activeChannelId) return;
-    socket.emit('soundboard:play', {
+    if (!activeChannelId) return;
+
+    const payload = {
       channelId: activeChannelId,
       soundId: sound.id,
       soundName: sound.name,
       audioDataUrl: sound.audioDataUrl,
       volume: 0.7,
+    };
+
+    // Publish to global cloud relay
+    cloudRelay.publish(`prochat/v1/voice/${activeChannelId}`, {
+      type: 'SOUNDBOARD',
+      sound: payload
     });
+
+    // Also emit over socket if available
+    if (socket) {
+      socket.emit('soundboard:play', payload);
+    }
   }, [socket, activeChannelId]);
+
 
   // Toggle Mic Track
   const toggleMute = () => {
