@@ -1,0 +1,8 @@
+{
+  "name": "pro-chat",
+  "private": true,
+  "scripts": {
+    "build": "cd client && npm run build",
+    "dev": "cd client && npm run dev"
+  }
+}
