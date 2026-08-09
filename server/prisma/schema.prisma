@@ -17,7 +17,17 @@ model User {
   password  String
   name      String
   avatarUrl String?
+  bannerUrl   String?
+  bannerColor String?
   status    String   @default("OFFLINE")
+
+  // Nitro subscription
+  isNitro         Boolean  @default(false)
+  nitroTier       String?  // "classic" | "nitro"
+  nitroExpiresAt  DateTime?
+  boostCredits    Int      @default(0)
+  nitroPerks      String?  // JSON: custom perks/badges
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -25,6 +35,7 @@ model User {
   members   Member[]
   messages  Message[]
   invites   Invite[]
+  boosts    ServerBoost[]
 }
 
 model Server {
@@ -32,6 +43,8 @@ model Server {
   name      String
   iconUrl   String?
   inviteCode String  @unique
+  boostCount Int     @default(0)
+  boostLevel Int     @default(0)
   
   ownerId   String
   owner     User     @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
@@ -40,6 +53,7 @@ model Server {
   channels  Channel[]
   roles     Role[]
   invites   Invite[]
+  boosts    ServerBoost[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -134,4 +148,20 @@ model Invite {
 
   @@index([serverId])
   @@index([inviterId])
+}
+
+model ServerBoost {
+  id        String   @id @default(uuid())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  serverId  String
+  server    Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, serverId])
+  @@index([userId])
+  @@index([serverId])
 }

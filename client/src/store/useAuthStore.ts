@@ -16,6 +16,7 @@ interface AuthState {
   error: string | null;
   setAuth: (user: User, token: string) => void;
   guestLogin: () => Promise<void>;
+  updateProfile: (data: { name?: string; avatarUrl?: string }) => Promise<User>;
   logout: () => void;
 }
 
@@ -55,6 +56,20 @@ export const useAuthStore = create<AuthState>((set) => {
         set({ user: response.data.user, token: response.data.token, isAuthenticated: true, isLoading: false });
       } catch (err: any) {
         set({ error: err.response?.data?.message || 'Guest login failed', isLoading: false });
+        throw err;
+      }
+    },
+
+    updateProfile: async (data: { name?: string; avatarUrl?: string }) => {
+      set({ isLoading: true, error: null });
+      try {
+        const response = await api.patch('/auth/profile', data);
+        const updatedUser = response.data;
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        set({ user: updatedUser, isLoading: false });
+        return updatedUser;
+      } catch (err: any) {
+        set({ error: err.response?.data?.message || 'Profile update failed', isLoading: false });
         throw err;
       }
     },

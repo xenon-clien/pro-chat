@@ -136,3 +136,109 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
+export const updateProfile = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { name, avatarUrl, bannerUrl, bannerColor } = req.body;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(name ? { name: name.trim() } : {}),
+        ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+        ...(bannerUrl !== undefined ? { bannerUrl } : {}),
+        ...(bannerColor !== undefined ? { bannerColor } : {}),
+      }
+    });
+
+    res.json({
+      id: updatedUser.id,
+      email: updatedUser.email,
+      name: updatedUser.name,
+      avatarUrl: updatedUser.avatarUrl,
+      bannerUrl: updatedUser.bannerUrl,
+      bannerColor: updatedUser.bannerColor,
+      status: updatedUser.status,
+      isNitro: updatedUser.isNitro,
+      nitroTier: updatedUser.nitroTier,
+    });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// ─── Nitro ────────────────────────────────────────────────────────────────────
+
+export const purchaseNitro = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+    const { tier } = req.body; // 'classic' | 'nitro'
+    if (!['classic', 'nitro'].includes(tier)) {
+      return res.status(400).json({ message: 'Invalid Nitro tier' });
+    }
+
+    const nitroExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    const boostCredits = tier === 'nitro' ? 2 : 0;
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { isNitro: true, nitroTier: tier, nitroExpiresAt, boostCredits }
+    });
+
+    res.json({
+      isNitro: user.isNitro,
+      nitroTier: user.nitroTier,
+      nitroExpiresAt: user.nitroExpiresAt,
+      boostCredits: user.boostCredits,
+    });
+  } catch (error) {
+    console.error('Nitro purchase error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const cancelNitro = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { isNitro: false, nitroTier: null, nitroExpiresAt: null, boostCredits: 0 }
+    });
+
+    res.json({ message: 'Nitro cancelled' });
+  } catch (error) {
+    console.error('Nitro cancel error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const getNitroStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    res.json({
+      isNitro: user.isNitro,
+      nitroTier: user.nitroTier,
+      nitroExpiresAt: user.nitroExpiresAt,
+      boostCredits: user.boostCredits,
+      bannerColor: user.bannerColor,
+      bannerUrl: user.bannerUrl,
+    });
+  } catch (error) {
+    console.error('Nitro status error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};

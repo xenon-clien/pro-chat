@@ -1,31 +1,50 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand: #5865F2;
-  --color-gray-900: #202225;
-  --color-gray-800: #2f3136;
-  --color-gray-700: #36393f;
-  --color-gray-600: #4f545c;
+  --color-brand: #FACC15;
+  --color-brand-hover: #EAB308;
+  --color-gray-950: #08090B;
+  --color-gray-900: #0D0E12;
+  --color-gray-850: #121418;
+  --color-gray-800: #171920;
+  --color-gray-700: #1F222B;
+  --color-gray-600: #2C303D;
 }
 
 @layer base {
   body {
-    @apply bg-gray-900 text-gray-100 overflow-hidden select-none;
+    @apply bg-[#0D0E12] text-[#E5E7EB] overflow-hidden select-none;
   }
 }
 
-/* Custom Scrollbar for Discord-like feel */
+/* Custom Yellow & Black Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
 ::-webkit-scrollbar-track {
-  background: #2f3136; 
+  background: #0D0E12; 
 }
 ::-webkit-scrollbar-thumb {
-  background: #202225; 
+  background: #242731; 
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #18191c; 
+  background: #FACC15; 
+}
+
+/* Soundboard slide-up animation */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
 }

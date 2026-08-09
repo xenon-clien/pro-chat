@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import api from '../lib/api';
 
+// Server store - exports Channel, Server, ServerMember interfaces
 export interface Channel {
   id: string;
   name: string;
@@ -12,6 +13,7 @@ export interface Server {
   id: string;
   name: string;
   iconUrl?: string;
+  ownerId?: string;
   channels: Channel[];
 }
 
@@ -29,11 +31,14 @@ interface ServerState {
   error: string | null;
   fetchServers: () => Promise<void>;
   createServer: (name: string) => Promise<void>;
+  updateServer: (serverId: string, data: { name?: string; iconUrl?: string }) => Promise<Server>;
+  deleteServer: (serverId: string) => Promise<void>;
+  createChannel: (serverId: string, name: string, type?: string) => Promise<void>;
   setActiveServer: (id: string) => void;
   setActiveChannel: (id: string) => void;
 }
 
-export const useServerStore = create<ServerState>((set) => ({
+export const useServerStore = create<ServerState>((set, get) => ({
   servers: [],
   activeServerId: null,
   activeChannelId: null,
@@ -69,6 +74,59 @@ export const useServerStore = create<ServerState>((set) => ({
       }));
     } catch (err: any) {
       console.error('Failed to create server', err);
+    }
+  },
+
+  updateServer: async (serverId: string, data: { name?: string; iconUrl?: string }) => {
+    try {
+      const response = await api.patch(`/servers/${serverId}`, data);
+      const updatedServer = response.data;
+      set((state) => ({
+        servers: state.servers.map(s => s.id === serverId ? { ...s, ...updatedServer } : s)
+      }));
+      return updatedServer;
+    } catch (err: any) {
+      console.error('Failed to update server', err);
+      throw err;
+    }
+  },
+
+  deleteServer: async (serverId: string) => {
+    try {
+      await api.delete(`/servers/${serverId}`);
+      set((state) => {
+        const remaining = state.servers.filter(s => s.id !== serverId);
+        return {
+          servers: remaining,
+          activeServerId: remaining.length > 0 ? remaining[0].id : null,
+          activeChannelId: remaining.length > 0 && remaining[0].channels.length > 0 ? remaining[0].channels[0].id : null
+        };
+      });
+    } catch (err: any) {
+      console.error('Failed to delete server', err);
+      throw err;
+    }
+  },
+
+  createChannel: async (serverId: string, name: string, type = 'TEXT') => {
+    try {
+      const response = await api.post(`/servers/${serverId}/channels`, { name, type });
+      const newChannel = response.data;
+      set((state) => ({
+        servers: state.servers.map((server) => {
+          if (server.id === serverId) {
+            return {
+              ...server,
+              channels: [...server.channels, newChannel]
+            };
+          }
+          return server;
+        }),
+        activeChannelId: newChannel.id
+      }));
+    } catch (err: any) {
+      console.error('Failed to create channel', err);
+      throw err;
     }
   },
 
