@@ -89,7 +89,7 @@ export const ChatArea: React.FC = () => {
 
   if (!activeChannel) {
     return (
-      <div className="flex-1 flex flex-col bg-[#0B0E14] min-w-0 items-center justify-center text-gray-500 font-medium select-none">
+      <div className="flex-1 flex flex-col bg-[#080B11] min-w-0 items-center justify-center text-gray-500 font-medium select-none">
         <Hash size={48} className="text-cyan-400/30 mb-2" />
         <span>Select a channel to start chatting</span>
       </div>
@@ -103,79 +103,79 @@ export const ChatArea: React.FC = () => {
   const isAiChannel = activeChannel.id === 'ch-ai-bot' || activeChannel.name.includes('ai') || activeChannel.name.includes('bot');
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#080B11] min-w-0 overflow-hidden select-none">
-      {/* ──────── TOP HEADER BAR (MATCHING SCREENSHOT) ──────── */}
-      <div className="h-14 border-b border-[#141A28] px-6 flex items-center justify-between shrink-0 bg-[#0B0E17]">
-        <div className="flex items-center space-x-3 min-w-0">
-          {isAiChannel ? (
-            <Bot size={22} className="text-cyan-400 shrink-0" />
-          ) : (
-            <Hash size={22} className="text-cyan-400 shrink-0" />
-          )}
-          <span className="font-black text-white text-base tracking-tight truncate">
-            {activeChannel.name}
-          </span>
-          <div className="h-4 w-[1px] bg-white/10 mx-1 shrink-0" />
-          <span className="text-xs text-gray-400 truncate hidden sm:inline">
-            {isAiChannel 
-              ? '🤖 24/7 ProChat AI Support & Chatbot'
-              : `Welcome to #${activeChannel.name} • Hangout & Voice`}
-          </span>
-        </div>
-
-        {/* Action Icons */}
-        <div className="flex items-center space-x-2 shrink-0">
-          {/* Notification Bell */}
-          <button
-            onClick={() => setIsMutedNotifications(!isMutedNotifications)}
-            className="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-white/5 transition-colors cursor-pointer"
-            title={isMutedNotifications ? "Unmute Channel" : "Mute Channel"}
-          >
-            {isMutedNotifications ? <BellOff size={17} className="text-rose-400" /> : <Bell size={17} />}
-          </button>
-
-          {/* Pin */}
-          <button
-            onClick={() => setIsPinnedOpen(!isPinnedOpen)}
-            className="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-white/5 transition-colors cursor-pointer"
-            title="Pinned Messages"
-          >
-            <Pin size={17} />
-          </button>
-
-          {/* Member List Toggle (Cyan circle when active) */}
-          <button 
-            onClick={() => setIsMemberListOpen(!isMemberListOpen)}
-            className={clsx(
-              "w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer",
-              isMemberListOpen 
-                ? "bg-cyan-400 text-black shadow-md shadow-cyan-400/30" 
-                : "text-gray-400 hover:text-white hover:bg-white/5"
+    <div className="flex-1 flex h-full bg-[#080B11] min-w-0 overflow-hidden select-none">
+      {/* ──────── CENTER CHAT COLUMN ──────── */}
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-[#080B11]">
+        {/* Top Header Bar */}
+        <div className="h-14 border-b border-[#141A28] px-6 flex items-center justify-between shrink-0 bg-[#0B0E17]">
+          <div className="flex items-center space-x-3 min-w-0">
+            {isAiChannel ? (
+              <Bot size={22} className="text-cyan-400 shrink-0" />
+            ) : (
+              <Hash size={22} className="text-cyan-400 shrink-0" />
             )}
-            title="Toggle Member List"
-          >
-            <Users size={16} />
-          </button>
+            <span className="font-black text-white text-base tracking-tight truncate">
+              {activeChannel.name}
+            </span>
+            <div className="h-4 w-[1px] bg-white/10 mx-1 shrink-0" />
+            <span className="text-xs text-gray-400 truncate hidden sm:inline">
+              {isAiChannel 
+                ? '🤖 24/7 ProChat AI Support & Chatbot'
+                : `Welcome to #${activeChannel.name} • Hangout & Voice`}
+            </span>
+          </div>
 
-          {/* Search Box */}
-          <div className="relative hidden md:block ml-1">
-            <input 
-              type="text" 
-              placeholder="Search..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-[#121624] text-xs text-white rounded-xl pl-3 pr-8 py-1.5 focus:outline-none focus:ring-1 focus:ring-cyan-400 w-36 focus:w-48 transition-all border border-white/5 placeholder-gray-500"
-            />
-            <Search size={14} className="absolute right-2.5 top-2 text-gray-400" />
+          {/* Header Action Icons */}
+          <div className="flex items-center space-x-2 shrink-0">
+            {/* Notification Bell */}
+            <button
+              onClick={() => setIsMutedNotifications(!isMutedNotifications)}
+              className="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-white/5 transition-colors cursor-pointer"
+              title={isMutedNotifications ? "Unmute Channel" : "Mute Channel"}
+            >
+              {isMutedNotifications ? <BellOff size={17} className="text-rose-400" /> : <Bell size={17} />}
+            </button>
+
+            {/* Pin */}
+            <button
+              onClick={() => setIsPinnedOpen(!isPinnedOpen)}
+              className="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-white/5 transition-colors cursor-pointer"
+              title="Pinned Messages"
+            >
+              <Pin size={17} />
+            </button>
+
+            {/* Member List Toggle */}
+            <button 
+              onClick={() => setIsMemberListOpen(!isMemberListOpen)}
+              className={clsx(
+                "w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer",
+                isMemberListOpen 
+                  ? "bg-cyan-400 text-black shadow-md shadow-cyan-400/30" 
+                  : "text-gray-400 hover:text-white hover:bg-white/5"
+              )}
+              title="Toggle Member List"
+            >
+              <Users size={16} />
+            </button>
+
+            {/* Search Box */}
+            <div className="relative hidden md:block ml-1">
+              <input 
+                type="text" 
+                placeholder="Search..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-[#121624] text-xs text-white rounded-xl pl-3 pr-8 py-1.5 focus:outline-none focus:ring-1 focus:ring-cyan-400 w-36 focus:w-48 transition-all border border-white/5 placeholder-gray-500"
+              />
+              <Search size={14} className="absolute right-2.5 top-2 text-gray-400" />
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Main Chat Workspace */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Messages Stream Container */}
+        {/* Scrollable Messages Stream with Welcome Hero at Top */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4 flex flex-col justify-start">
-          {/* ──────── HERO WELCOME HEADER (PIXEL-PERFECT MATCHING SCREENSHOT) ──────── */}
+          {/* ──────── HERO WELCOME HEADER ──────── */}
           <div className="text-center py-8 px-4 mb-3 flex flex-col items-center justify-center animate-fade-in shrink-0">
             {/* Glowing Rounded Hash/Bot Emblem with Sparkle Badge */}
             <div className="relative mb-4 animate-scale-up">
@@ -293,7 +293,7 @@ export const ChatArea: React.FC = () => {
             <div className="text-cyan-400/60 text-center w-full py-4 text-xs font-bold">Loading messages...</div>
           ) : (
             <>
-              {/* Message List Items (Direct chronological order from top to bottom) */}
+              {/* Message List Items */}
               {filteredMessages.map((msg) => {
                 const isAuthorBot = msg.author.isBot || msg.author.id.includes('bot');
 
@@ -349,7 +349,7 @@ export const ChatArea: React.FC = () => {
           )}
         </div>
 
-        {/* ──────── INPUT BAR (MATCHING SCREENSHOT) ──────── */}
+        {/* Input Bar */}
         <div className="px-6 pb-6 pt-2 shrink-0 relative bg-[#080B11]">
           {/* Emoji Picker Popover */}
           <EmojiPicker 
@@ -455,7 +455,7 @@ export const ChatArea: React.FC = () => {
         </div>
       </div>
 
-      {/* Right Member List Drawer */}
+      {/* ──────── RIGHT MEMBER LIST DRAWER (CORRECTLY POSITIONED ON RIGHT SIDE) ──────── */}
       {isMemberListOpen && (
         <MemberList serverId={activeServer.id} />
       )}

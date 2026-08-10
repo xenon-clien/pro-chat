@@ -80,16 +80,41 @@ const DEFAULT_SERVERS: Server[] = [
   }
 ];
 
-export const useServerStore = create<ServerState>((set, get) => {
-  // Load saved servers from localStorage
-  const savedServers = (() => {
-    try {
-      const stored = localStorage.getItem('prochat_user_servers');
-      return stored ? JSON.parse(stored) : DEFAULT_SERVERS;
-    } catch {
-      return DEFAULT_SERVERS;
+function getCleanServers(): Server[] {
+  try {
+    const stored = localStorage.getItem('prochat_user_servers');
+    if (!stored) return DEFAULT_SERVERS;
+    const parsed: Server[] = JSON.parse(stored);
+    if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_SERVERS;
+
+    const seen = new Set<string>();
+    const cleanList: Server[] = [];
+
+    for (const s of parsed) {
+      if (!s || !s.id) continue;
+      const key = s.id.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        // Ensure valid channels
+        if (!s.channels || s.channels.length === 0) {
+          s.channels = [
+            { id: 'ch-gen-' + s.id, name: 'general', type: 'TEXT', serverId: s.id },
+            { id: 'ch-voice-' + s.id, name: 'General Voice', type: 'VOICE', serverId: s.id },
+          ];
+        }
+        cleanList.push(s);
+      }
     }
-  })();
+
+    // If too many corrupted duplicates accumulated in old localStorage, keep clean default + joined
+    return cleanList.length > 0 ? cleanList.slice(0, 6) : DEFAULT_SERVERS;
+  } catch {
+    return DEFAULT_SERVERS;
+  }
+}
+
+export const useServerStore = create<ServerState>((set, get) => {
+  const savedServers = getCleanServers();
 
   // Register getter so useMessageStore can find the active server's inviteCode for shared MQTT topics
   registerServerCodeGetter(() => {
@@ -138,8 +163,8 @@ export const useServerStore = create<ServerState>((set, get) => {
     },
 
     createServer: async (name: string) => {
-      const cleanName = name.trim();
-      const serverId = 'server-' + Date.now();
+      const cleanName = name.trim() || 'New Gaming Server';
+      const serverId = 'srv-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5);
       const code = cleanName.substring(0, 4).toUpperCase().replace(/[^A-Z]/g, 'PRO') + '-' + Math.floor(1000 + Math.random() * 9000);
       
       const newServer: Server = {
@@ -149,20 +174,22 @@ export const useServerStore = create<ServerState>((set, get) => {
         inviteCode: code,
         channels: [
           { id: 'ch-gen-' + serverId, name: 'general', type: 'TEXT', serverId },
+          { id: 'ch-ai-' + serverId, name: '🤖-sam-ai', type: 'TEXT', serverId },
           { id: 'ch-voice-' + serverId, name: 'General Voice', type: 'VOICE', serverId },
         ]
       };
 
-      const updated = [...get().servers, newServer];
-      localStorage.setItem('prochat_user_servers', JSON.stringify(updated));
+      const updated = [newServer, ...get().servers];
+      const cleanUpdated = getCleanServers();
+      localStorage.setItem('prochat_user_servers', JSON.stringify([newServer, ...cleanUpdated]));
 
-      // Announce server to global directory so anyone across the world can discover and join it!
+      // Announce server to global directory
       cloudRelay.publish('prochat/v1/servers/directory', {
         server: newServer,
       });
 
       set((state) => ({
-        servers: updated,
+        servers: [newServer, ...state.servers.filter(s => s.id !== newServer.id)],
         publicDirectory: [newServer, ...state.publicDirectory],
         activeServerId: newServer.id,
         activeChannelId: newServer.channels[0].id
@@ -170,9 +197,7 @@ export const useServerStore = create<ServerState>((set, get) => {
 
       try {
         await api.post('/servers', { name: cleanName });
-      } catch (err) {
-        // Handled
-      }
+      } catch (err) {}
 
       return newServer;
     },
@@ -194,15 +219,12 @@ export const useServerStore = create<ServerState>((set, get) => {
             }
           }
         }
-      } catch (e) {
-        // use raw
-      }
+      } catch (e) {}
 
-      // Clean query string
       const cleanCode = code.trim().toUpperCase().replace(/^JOIN-/, '');
       const state = get();
 
-      // 1. Check if user already joined this server
+      // 1. Check if user already has this server
       const existingInUser = state.servers.find(
         s => s.inviteCode?.toUpperCase() === cleanCode || 
              s.name.toUpperCase() === cleanCode || 
@@ -216,7 +238,7 @@ export const useServerStore = create<ServerState>((set, get) => {
         return existingInUser;
       }
 
-      // 2. Check in public directory (servers created by others)
+      // 2. Check in public directory
       const inDirectory = state.publicDirectory.find(
         s => s.inviteCode?.toUpperCase() === cleanCode || 
              s.name.toUpperCase() === cleanCode ||
@@ -231,87 +253,97 @@ export const useServerStore = create<ServerState>((set, get) => {
         inviteCode: cleanCode,
         channels: [
           { id: 'ch-gen-' + cleanCode.toLowerCase(), name: 'general', type: 'TEXT', serverId: 'joined-' + cleanCode.toLowerCase() },
+          { id: 'ch-ai-' + cleanCode.toLowerCase(), name: '🤖-sam-ai', type: 'TEXT', serverId: 'joined-' + cleanCode.toLowerCase() },
           { id: 'ch-voice-' + cleanCode.toLowerCase(), name: 'General Voice', type: 'VOICE', serverId: 'joined-' + cleanCode.toLowerCase() },
         ]
       };
 
-      const updated = [...state.servers, serverToJoin];
+      const updated = [...state.servers.filter(s => s.id !== serverToJoin.id), serverToJoin];
       localStorage.setItem('prochat_user_servers', JSON.stringify(updated));
 
       set({
         servers: updated,
         activeServerId: serverToJoin.id,
-        activeChannelId: serverToJoin.channels[0].id,
+        activeChannelId: serverToJoin.channels[0]?.id || null,
       });
-
-
-      try {
-        await api.post('/servers/join', { inviteCode: cleanCode });
-      } catch (err) {
-        // Handled
-      }
 
       return serverToJoin;
     },
 
     updateServer: async (serverId: string, data: { name?: string; iconUrl?: string }) => {
-      let updated: any = null;
-      set((state) => {
-        const next = state.servers.map(s => {
-          if (s.id === serverId) {
-            updated = { ...s, ...data };
-            return updated;
-          }
-          return s;
-        });
-        localStorage.setItem('prochat_user_servers', JSON.stringify(next));
-        return { servers: next };
+      const state = get();
+      const updated = state.servers.map(s => {
+        if (s.id === serverId) {
+          return {
+            ...s,
+            name: data.name || s.name,
+            iconUrl: data.iconUrl || s.iconUrl,
+          };
+        }
+        return s;
       });
-      return updated;
+
+      localStorage.setItem('prochat_user_servers', JSON.stringify(updated));
+      set({ servers: updated });
+      return updated.find(s => s.id === serverId)!;
     },
 
     deleteServer: async (serverId: string) => {
-      set((state) => {
-        const remaining = state.servers.filter(s => s.id !== serverId);
-        localStorage.setItem('prochat_user_servers', JSON.stringify(remaining));
-        return {
-          servers: remaining,
-          activeServerId: remaining.length > 0 ? remaining[0].id : null,
-          activeChannelId: remaining.length > 0 && remaining[0].channels.length > 0 ? remaining[0].channels[0].id : null
-        };
+      const current = get().servers;
+      const filtered = current.filter(s => s.id !== serverId);
+      const nextList = filtered.length > 0 ? filtered : DEFAULT_SERVERS;
+      localStorage.setItem('prochat_user_servers', JSON.stringify(nextList));
+      set({
+        servers: nextList,
+        activeServerId: nextList[0]?.id || 'pro-chat-hq',
+        activeChannelId: nextList[0]?.channels[0]?.id || 'ch-general',
       });
     },
 
-    createChannel: async (serverId: string, name: string, type = 'TEXT') => {
+    createChannel: async (serverId: string, name: string, type: string = 'TEXT') => {
+      const cleanName = name.toLowerCase().trim().replace(/[^a-z0-9-_]/g, '-');
+      const channelId = 'ch-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5);
+      
       const newChannel: Channel = {
-        id: 'ch-' + Date.now(),
-        name,
+        id: channelId,
+        name: cleanName,
         type,
         serverId
       };
-      set((state) => {
-        const next = state.servers.map((server) => {
-          if (server.id === serverId) {
-            return {
-              ...server,
-              channels: [...server.channels, newChannel]
-            };
-          }
-          return server;
-        });
-        localStorage.setItem('prochat_user_servers', JSON.stringify(next));
-        return { servers: next, activeChannelId: newChannel.id };
+
+      const state = get();
+      const updated = state.servers.map(s => {
+        if (s.id === serverId) {
+          return {
+            ...s,
+            channels: [...s.channels, newChannel]
+          };
+        }
+        return s;
       });
+
+      localStorage.setItem('prochat_user_servers', JSON.stringify(updated));
+      set({
+        servers: updated,
+        activeChannelId: channelId
+      });
+
+      try {
+        await api.post(`/channels/${serverId}`, { name: cleanName, type });
+      } catch (err) {}
     },
 
     setActiveServer: (id: string) => {
       const state = get();
-      const server = state.servers.find(s => s.id === id);
-      set({ 
+      const target = state.servers.find(s => s.id === id);
+      set({
         activeServerId: id,
-        activeChannelId: server?.channels?.length ? server.channels[0].id : null
+        activeChannelId: target?.channels[0]?.id || 'ch-general'
       });
     },
-    setActiveChannel: (id: string) => set({ activeChannelId: id }),
+
+    setActiveChannel: (id: string) => {
+      set({ activeChannelId: id });
+    }
   };
 });
