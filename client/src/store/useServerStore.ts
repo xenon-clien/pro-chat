@@ -51,6 +51,7 @@ const DEFAULT_SERVERS: Server[] = [
     inviteCode: 'PRO-HQ-8821',
     channels: [
       { id: 'ch-general', name: 'general', type: 'TEXT', serverId: 'pro-chat-hq' },
+      { id: 'ch-ai-bot', name: '🤖-sam-ai-assistant', type: 'TEXT', serverId: 'pro-chat-hq' },
       { id: 'ch-lounge', name: 'lounge', type: 'TEXT', serverId: 'pro-chat-hq' },
       { id: 'ch-voice-1', name: 'General Voice', type: 'VOICE', serverId: 'pro-chat-hq' },
     ]
@@ -62,6 +63,7 @@ const DEFAULT_SERVERS: Server[] = [
     inviteCode: 'GAME-7799',
     channels: [
       { id: 'ch-gaming-chat', name: 'general', type: 'TEXT', serverId: 'gaming-zone' },
+      { id: 'ch-gaming-ai', name: '🤖-gaming-bot', type: 'TEXT', serverId: 'gaming-zone' },
       { id: 'ch-gaming-voice', name: 'Squad Voice', type: 'VOICE', serverId: 'gaming-zone' },
     ]
   },
@@ -72,6 +74,7 @@ const DEFAULT_SERVERS: Server[] = [
     inviteCode: 'ANIME-101',
     channels: [
       { id: 'ch-anime-general', name: 'general', type: 'TEXT', serverId: 'anime-lounge' },
+      { id: 'ch-anime-ai', name: '🤖-sam-assistant', type: 'TEXT', serverId: 'anime-lounge' },
       { id: 'ch-anime-voice', name: 'Watch Party', type: 'VOICE', serverId: 'anime-lounge' },
     ]
   }

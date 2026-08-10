@@ -19,12 +19,19 @@ export const VoiceArea: React.FC = () => {
   const { servers, activeServerId, activeChannelId, setActiveChannel } = useServerStore();
   const { user } = useAuthStore();
   const { isNitro } = useNitroStore();
-  const { peers, joinVoiceChannel, leaveVoiceChannel, updateLocalState, startScreenShare, stopScreenShare } = useVoiceStore();
+  const { 
+    peers, 
+    localScreenStream, 
+    joinVoiceChannel, 
+    leaveVoiceChannel, 
+    updateLocalState, 
+    startScreenShare, 
+    stopScreenShare 
+  } = useVoiceStore();
 
   const [isMuted, setIsMuted] = useState(true);
   const [isDeafened, setIsDeafened] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
   const [streamQuality, setStreamQuality] = useState({ res: '1080p', fps: '60' });
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -37,7 +44,6 @@ export const VoiceArea: React.FC = () => {
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
   const screenContainerRef = useRef<HTMLDivElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  const screenStreamRef = useRef<MediaStream | null>(null);
 
   const activeServer = servers.find(s => s.id === activeServerId) || servers[0];
   const activeChannel = activeServer?.channels.find(c => c.id === activeChannelId) || activeServer?.channels[0];
@@ -52,7 +58,7 @@ export const VoiceArea: React.FC = () => {
           name: user?.name || 'Pro User',
           avatarUrl: user?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${user?.name || 'Pro'}&backgroundColor=fbbf24`,
         },
-        activeServer?.inviteCode  // ← pass invite code for shared MQTT topic
+        activeServer?.inviteCode
       );
     }
 
@@ -61,8 +67,24 @@ export const VoiceArea: React.FC = () => {
     };
   }, [activeChannelId, user?.id, user?.name, user?.avatarUrl, activeServer?.inviteCode, joinVoiceChannel, leaveVoiceChannel]);
 
-  // Actual connected members list from real-time presence (NO FAKE / DUMMY IMAGES)
+  // Connected peers list from real-time presence
   const connectedList = Object.values(peers);
+
+  // Active Screen Sharer (either local user or remote peer)
+  const activeScreenPeer = connectedList.find(p => p.isScreenSharing);
+  const isLocalScreenSharing = !!localScreenStream;
+  const isAnyScreenSharing = isLocalScreenSharing || !!activeScreenPeer;
+  const currentScreenStream = isLocalScreenSharing 
+    ? localScreenStream 
+    : (activeScreenPeer?.remoteStream || null);
+
+  // Bind screen stream to video element whenever active stream changes
+  useEffect(() => {
+    if (screenVideoRef.current && currentScreenStream) {
+      screenVideoRef.current.srcObject = currentScreenStream;
+      screenVideoRef.current.play().catch(e => console.warn('[Screen Video] Play warning:', e));
+    }
+  }, [currentScreenStream, isAnyScreenSharing]);
 
   // Camera handling
   useEffect(() => {
@@ -101,13 +123,18 @@ export const VoiceArea: React.FC = () => {
     };
   }, [isCameraOn]);
 
-  // Native Screen sharing — captures screen AND sends it to peers via WebRTC
+  // Native Screen sharing — captures screen AND updates WebRTC stream
   const handleStartStream = async (options: { resolution: string; fps: string; shareAudio: boolean }) => {
     try {
-      // Use store's startScreenShare which handles WebRTC stream replacement
-      await startScreenShare(activeServer?.inviteCode);
-      setIsScreenSharing(true);
-      setStreamError(null);
+      setStreamQuality({ res: options.resolution, fps: options.fps });
+      const stream = await startScreenShare(activeServer?.inviteCode);
+      if (stream) {
+        setStreamError(null);
+        if (screenVideoRef.current) {
+          screenVideoRef.current.srcObject = stream;
+          screenVideoRef.current.play().catch(() => {});
+        }
+      }
     } catch (err: any) {
       if (err.name !== 'NotAllowedError') {
         setStreamError('Failed to start screen share: ' + (err.message || 'Permission denied'));
@@ -117,7 +144,6 @@ export const VoiceArea: React.FC = () => {
 
   const handleStopStream = () => {
     stopScreenShare();
-    setIsScreenSharing(false);
   };
 
   // Toggle Fullscreen on Screen Share
@@ -185,9 +211,6 @@ export const VoiceArea: React.FC = () => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
     }
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
-    }
     const textChannel = activeServer?.channels.find(c => c.type === 'TEXT');
     if (textChannel) {
       setActiveChannel(textChannel.id);
@@ -209,7 +232,7 @@ export const VoiceArea: React.FC = () => {
 
         {/* Right: Target Quality Badge & Live Indicator */}
         <div className="flex items-center space-x-3">
-          {isScreenSharing && (
+          {isAnyScreenSharing && (
             <div className="flex items-center space-x-1.5 px-3 py-1 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-400 text-xs font-black shadow-lg">
               <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
               <span>LIVE STREAM</span>
@@ -232,7 +255,7 @@ export const VoiceArea: React.FC = () => {
         )}
 
         {/* ──────── ENHANCED CINEMA ENTIRE SCREEN PLAYER ──────── */}
-        {isScreenSharing ? (
+        {isAnyScreenSharing ? (
           <div 
             ref={screenContainerRef}
             className={clsx(
@@ -240,28 +263,39 @@ export const VoiceArea: React.FC = () => {
               isFullscreen ? "h-screen w-screen border-none rounded-none" : "h-[74vh] mb-2"
             )}
           >
-            {/* Screen Video Stream */}
+            {/* Screen Video Stream (Plays local or remote live feed) */}
             <video 
               ref={(el) => {
                 screenVideoRef.current = el;
-                if (el && screenStreamRef.current) {
-                  el.srcObject = screenStreamRef.current;
-                  el.play().catch(e => console.error(e));
+                if (el && currentScreenStream) {
+                  el.srcObject = currentScreenStream;
+                  el.play().catch(() => {});
                 }
               }}
               autoPlay 
               playsInline 
-              muted
+              muted={isLocalScreenSharing}
               className="w-full h-full object-contain bg-black cursor-pointer"
               onDoubleClick={toggleFullscreen}
             />
+
+            {/* If stream is loading or initializing, show Standby High-Tech Preview */}
+            {!currentScreenStream && (
+              <div className="absolute inset-0 bg-[#0A0D15] flex flex-col items-center justify-center space-y-3">
+                <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-400/30 flex items-center justify-center text-cyan-400 animate-pulse">
+                  <Monitor size={32} />
+                </div>
+                <div className="text-white font-black text-sm">Initializing Screen Stream...</div>
+                <div className="text-xs text-gray-400">Capturing display window at {streamQuality.res} @ {streamQuality.fps}fps</div>
+              </div>
+            )}
 
             {/* Top Stream Header Overlay */}
             <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-auto">
               {/* Streamer Badge */}
               <div className="flex items-center space-x-2.5 bg-black/85 backdrop-blur-md px-3.5 py-1.5 rounded-2xl border border-cyan-400/30 shadow-xl text-xs font-bold text-white">
                 <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
-                <span>{user?.name}'s Screen</span>
+                <span>{activeScreenPeer?.name || user?.name}'s Screen</span>
                 <span className="bg-cyan-400/20 text-cyan-300 px-2 py-0.5 rounded-md font-mono text-[10px] font-black">
                   {streamQuality.res} {streamQuality.fps}FPS
                 </span>
@@ -285,12 +319,14 @@ export const VoiceArea: React.FC = () => {
                   {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
                 </button>
 
-                <button
-                  onClick={handleStopStream}
-                  className="bg-rose-600 hover:bg-rose-500 text-white font-black text-xs px-3.5 py-1.5 rounded-xl shadow-lg transition-transform active:scale-95 cursor-pointer"
-                >
-                  Stop Sharing
-                </button>
+                {isLocalScreenSharing && (
+                  <button
+                    onClick={handleStopStream}
+                    className="bg-rose-600 hover:bg-rose-500 text-white font-black text-xs px-3.5 py-1.5 rounded-xl shadow-lg transition-transform active:scale-95 cursor-pointer"
+                  >
+                    Stop Sharing
+                  </button>
+                )}
               </div>
             </div>
 
@@ -349,33 +385,36 @@ export const VoiceArea: React.FC = () => {
                     </>
                   )}
 
-                  {/* Main Avatar Container */}
-                  <div 
+                  <img
+                    src={member.avatarUrl}
+                    alt={member.name}
                     className={clsx(
-                      "w-28 h-28 rounded-full bg-[#0A0D14] flex items-center justify-center relative overflow-hidden transition-all duration-300 shadow-2xl animate-character-float",
-                      member.isSpeaking
-                        ? "ring-4 ring-cyan-400 ring-offset-4 ring-offset-[#111522] shadow-cyan-400/40"
-                        : "ring-2 ring-white/10"
+                      "w-28 h-28 rounded-3xl object-cover transition-all duration-300 shadow-2xl relative z-10 border-2",
+                      member.isSpeaking 
+                        ? "border-cyan-400 scale-105 ring-4 ring-cyan-400/20 animate-bounce-subtle" 
+                        : "border-white/10"
                     )}
-                  >
-                    <img
-                      src={member.avatarUrl}
-                      alt={member.name}
-                      className="w-24 h-24 object-contain transition-transform duration-300 group-hover:scale-110 select-none pointer-events-none"
-                    />
-                  </div>
+                  />
 
-                  {/* Muted Microphone Badge */}
+                  {/* Mute Overlay Icon */}
                   {member.isMuted && (
-                    <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-rose-600 border-2 border-[#111522] flex items-center justify-center text-white shadow-lg animate-scale-up">
-                      <MicOff size={15} />
+                    <div className="absolute -bottom-1 -right-1 z-20 w-7 h-7 rounded-full bg-rose-600 border-2 border-[#111522] flex items-center justify-center text-white shadow-lg">
+                      <MicOff size={14} />
                     </div>
                   )}
                 </div>
 
-                {/* Bottom Member Name */}
-                <div className="flex items-center space-x-2">
-                  <span className="text-white font-extrabold text-sm tracking-tight">{member.name}</span>
+                {/* Member Display Name */}
+                <div className="w-full text-center mt-2">
+                  <div className="font-black text-white text-base tracking-tight truncate flex items-center justify-center gap-1.5">
+                    <span>{member.name}</span>
+                    {member.isYou && isNitro && (
+                      <span className="text-[10px] bg-amber-400/20 text-amber-300 px-1.5 py-0.2 rounded font-bold">PRO</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    {member.isSpeaking ? 'Speaking...' : member.isMuted ? 'Muted' : 'Listening'}
+                  </div>
                 </div>
               </div>
             ))}
@@ -383,93 +422,98 @@ export const VoiceArea: React.FC = () => {
         )}
       </div>
 
-      {/* Floating Soundboard Drawer */}
-      <div className="relative">
-        <SoundboardPanel
-          isOpen={isSoundboardOpen}
-          onClose={() => setIsSoundboardOpen(false)}
-          onPlaySound={handlePlaySound}
-          incomingSound={incomingSound}
-        />
+      {/* Floating Soundboard Tray */}
+      {isSoundboardOpen && (
+        <div className="p-4 bg-[#0A0D14] border-t border-[#181D2A] animate-slide-up">
+          <SoundboardPanel
+            isOpen={isSoundboardOpen}
+            onClose={() => setIsSoundboardOpen(false)}
+            onPlaySound={handlePlaySound}
+            incomingSound={incomingSound}
+          />
+        </div>
+      )}
 
-        {/* Bottom Action Bar */}
-        <div className="h-22 bg-[#0E121B] border-t border-[#181D2A] px-8 flex items-center justify-between shrink-0 shadow-2xl">
-          {/* Left / Center Control Buttons */}
-          <div className="flex items-center space-x-3.5">
-            {/* 🔴 Mute / Unmute Button */}
-            <button
-              onClick={toggleMute}
-              className={clsx(
-                "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-md cursor-pointer border",
-                isMuted
-                  ? "bg-rose-600/20 border-rose-500/40 text-rose-400 hover:bg-rose-600 hover:text-white"
-                  : "bg-[#161B28] border-cyan-400/40 text-cyan-400 hover:bg-cyan-400 hover:text-black"
-              )}
-              title={isMuted ? "Unmute Mic" : "Mute Mic"}
-            >
-              {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
-            </button>
-
-            {/* 🎧 Headphones / Deafen Button */}
-            <button
-              onClick={() => setIsDeafened(!isDeafened)}
-              className={clsx(
-                "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-md cursor-pointer border",
-                isDeafened
-                  ? "bg-rose-600/20 border-rose-500/40 text-rose-400 hover:bg-rose-600 hover:text-white"
-                  : "bg-[#161B28] border-white/10 text-gray-300 hover:border-cyan-400 hover:text-cyan-400"
-              )}
-              title={isDeafened ? "Undeafen" : "Deafen"}
-            >
-              {isDeafened ? <VolumeX size={20} /> : <Headphones size={20} />}
-            </button>
-
-            {/* 🎙️ Soundboard Button */}
-            <button
-              onClick={() => setIsSoundboardOpen(prev => !prev)}
-              className={clsx(
-                "h-12 px-5 rounded-2xl flex items-center space-x-2 transition-all shadow-md font-extrabold text-xs cursor-pointer border",
-                isSoundboardOpen
-                  ? "bg-cyan-400 text-black border-cyan-300 shadow-cyan-400/30"
-                  : "bg-[#161B28] hover:bg-cyan-500/10 text-cyan-400 border-cyan-500/30 hover:border-cyan-400"
-              )}
-            >
-              <Radio size={16} className="animate-pulse" />
-              <span>Soundboard</span>
-            </button>
-
-            {/* 🔴 Clean Solid Red Disconnect Button */}
-            <button
-              onClick={handleDisconnect}
-              className="h-12 px-4 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-black text-xs rounded-2xl flex items-center space-x-1.5 transition-all shadow-lg shadow-rose-600/30 cursor-pointer"
-              title="Disconnect / Leave Call"
-            >
-              <Phone size={16} className="rotate-[135deg] fill-white" />
-              <span>Leave</span>
-            </button>
-          </div>
-
-
-          {/* Right: Share Screen Button */}
-          <div className="flex items-center space-x-3">
-            {isScreenSharing ? (
-              <button
-                onClick={handleStopStream}
-                className="h-12 px-6 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs shadow-xl shadow-rose-600/30 transition-all cursor-pointer flex items-center space-x-2"
-              >
-                <ScreenShare size={18} />
-                <span>Stop Sharing</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => setIsScreenModalOpen(true)}
-                className="h-12 px-6 rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-500 to-pink-500 hover:from-blue-500 hover:via-cyan-400 hover:to-pink-400 text-white font-black text-xs tracking-wide shadow-xl shadow-cyan-500/25 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center space-x-2.5"
-              >
-                <ScreenShare size={18} />
-                <span>Share Screen</span>
-              </button>
+      {/* ──────── BOTTOM VOICE CONTROL TOOLBAR ──────── */}
+      <div className="h-20 bg-[#090B10] border-t border-[#181D2A] px-6 flex items-center justify-between shrink-0">
+        {/* Left: Device Controls (Mute, Deafen) */}
+        <div className="flex items-center space-x-3">
+          {/* Mic Mute / Unmute */}
+          <button
+            onClick={toggleMute}
+            className={clsx(
+              "h-12 px-4 rounded-2xl flex items-center space-x-2 font-bold text-xs transition-all shadow-md cursor-pointer",
+              isMuted
+                ? "bg-[#1A1F2E] text-rose-400 hover:bg-[#23293D] border border-rose-500/30"
+                : "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-cyan-500/20"
             )}
-          </div>
+            title={isMuted ? "Unmute Microphone" : "Mute Microphone"}
+          >
+            {isMuted ? <MicOff size={18} /> : <Mic size={18} />}
+            <span>{isMuted ? 'Unmute' : 'Mute'}</span>
+          </button>
+
+          {/* Deafen Toggle */}
+          <button
+            onClick={() => setIsDeafened(!isDeafened)}
+            className={clsx(
+              "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-md cursor-pointer",
+              isDeafened
+                ? "bg-rose-600/20 border border-rose-500 text-rose-400"
+                : "bg-[#141824] hover:bg-[#1C2234] border border-white/5 text-gray-300"
+            )}
+            title={isDeafened ? "Undeafen" : "Deafen"}
+          >
+            {isDeafened ? <VolumeX size={18} /> : <Headphones size={18} />}
+          </button>
+        </div>
+
+        {/* Center: Stage Actions (Soundboard, Disconnect) */}
+        <div className="flex items-center space-x-3">
+          {/* Soundboard Button */}
+          <button
+            onClick={() => setIsSoundboardOpen(!isSoundboardOpen)}
+            className={clsx(
+              "h-12 px-5 rounded-2xl font-black text-xs flex items-center space-x-2 transition-all shadow-lg cursor-pointer",
+              isSoundboardOpen
+                ? "bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-pink-500/25"
+                : "bg-[#141824] hover:bg-[#1C2234] border border-white/10 text-gray-300"
+            )}
+          >
+            <Radio size={16} className="animate-pulse" />
+            <span>Soundboard</span>
+          </button>
+
+          {/* 🔴 Clean Solid Red Disconnect Button */}
+          <button
+            onClick={handleDisconnect}
+            className="h-12 px-5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-black text-xs rounded-2xl flex items-center space-x-2 transition-all shadow-lg shadow-rose-600/30 cursor-pointer"
+            title="Disconnect / Leave Call"
+          >
+            <Phone size={16} className="rotate-[135deg] fill-white" />
+            <span>Leave</span>
+          </button>
+        </div>
+
+        {/* Right: Share Screen Button */}
+        <div className="flex items-center space-x-3">
+          {isLocalScreenSharing ? (
+            <button
+              onClick={handleStopStream}
+              className="h-12 px-6 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs shadow-xl shadow-rose-600/30 transition-all cursor-pointer flex items-center space-x-2"
+            >
+              <ScreenShare size={18} />
+              <span>Stop Sharing</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsScreenModalOpen(true)}
+              className="h-12 px-6 rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-500 to-pink-500 hover:from-blue-500 hover:via-cyan-400 hover:to-pink-400 text-white font-black text-xs tracking-wide shadow-xl shadow-cyan-500/25 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center space-x-2.5"
+            >
+              <ScreenShare size={18} />
+              <span>Share Screen</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -486,7 +530,7 @@ export const VoiceArea: React.FC = () => {
       />
 
       {/* Hidden audio elements to play remote peer streams via WebRTC */}
-      {Object.values(peers).filter(p => !p.isYou && p.remoteStream).map(peer => (
+      {connectedList.filter(p => !p.isYou && p.remoteStream).map(peer => (
         <audio
           key={peer.id}
           autoPlay

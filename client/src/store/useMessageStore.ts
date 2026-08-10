@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import api from '../lib/api';
 import cloudRelay from '../lib/cloudRelay';
+import { generateAiBotResponse, SAM_BOT_USER } from '../services/aiBotService';
 
 // ── Global server invite code getter (injected externally to avoid circular import) ──
 let _getActiveServerInviteCode: (() => string | null) = () => null;
@@ -16,6 +17,7 @@ export interface Message {
     id: string;
     name: string;
     avatarUrl?: string;
+    isBot?: boolean;
   };
   channelId: string;
 }
@@ -40,8 +42,23 @@ const SEED_MESSAGES: Record<string, Message[]> = {
         id: 'bot-admin',
         name: 'ProChat System',
         avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=ProChatBot',
+        isBot: true,
       },
       channelId: 'ch-general',
+    },
+  ],
+  'ch-ai-bot': [
+    {
+      id: 'msg-ai-welcome',
+      content: "Hi there! Thanks for reaching out to ProChat support. I'm **Sam**—your dedicated ProChat AI Assistant! 🤖✨\n\nAsk me anything about:\n• 📺 **Screen Sharing & HD Video Streaming**\n• 👥 **Server Invites & Friends Auto-Join**\n• ⚡ **ProChat Nitro & Billing Support**\n• 🎙️ **HD Voice Channels & Soundboard**\n• 🎨 **Custom Profile Picture & Banner Setup**",
+      createdAt: new Date(Date.now() - 1800000).toISOString(),
+      author: {
+        id: SAM_BOT_USER.id,
+        name: SAM_BOT_USER.name,
+        avatarUrl: SAM_BOT_USER.avatarUrl,
+        isBot: true,
+      },
+      channelId: 'ch-ai-bot',
     },
   ],
 };
@@ -105,7 +122,7 @@ export const useMessageStore = create<MessageState>((set, get) => {
         }
       });
 
-      const storageKey = `prochat_msgs_${topic.replace(/\//g, '_')}`;
+      const storageKey = `prochat_msgs_${topic.replace(/\//g, '_')}_${channelId}`;
       let localSaved: Message[] = [];
       try {
         const raw = localStorage.getItem(storageKey);
@@ -134,7 +151,7 @@ export const useMessageStore = create<MessageState>((set, get) => {
         set({ messages: [...current, message] });
         try {
           const topic = getSharedTopic(message.channelId);
-          const storageKey = `prochat_msgs_${topic.replace(/\//g, '_')}`;
+          const storageKey = `prochat_msgs_${topic.replace(/\//g, '_')}_${message.channelId}`;
           const saved: Message[] = JSON.parse(localStorage.getItem(storageKey) || '[]');
           if (!saved.find((m) => m.id === message.id)) {
             const trimmed = [message, ...saved].slice(0, 200);
@@ -172,6 +189,34 @@ export const useMessageStore = create<MessageState>((set, get) => {
       try {
         await api.post(`/messages/${channelId}`, { content });
       } catch (err: any) {}
+
+      // 🤖 Trigger AI Bot "Sam" Response if messaging in AI channel or mentioning Sam
+      const isAiChannel = channelId === 'ch-ai-bot' || channelId.includes('ai');
+      const mentionsSam = content.toLowerCase().includes('@sam') || 
+                          content.toLowerCase().includes('@ai') || 
+                          content.toLowerCase().includes('@bot');
+
+      if (isAiChannel || mentionsSam) {
+        setTimeout(async () => {
+          const aiResponse = await generateAiBotResponse(content);
+          const botMsg: Message = {
+            id: 'msg-sam-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+            content: aiResponse.content,
+            createdAt: new Date().toISOString(),
+            author: {
+              id: SAM_BOT_USER.id,
+              name: SAM_BOT_USER.name,
+              avatarUrl: SAM_BOT_USER.avatarUrl,
+              isBot: true,
+            },
+            channelId,
+          };
+
+          get().addMessage(botMsg);
+          cloudRelay.publish(topic, botMsg);
+          playNotificationChime();
+        }, 500);
+      }
     },
   };
 });

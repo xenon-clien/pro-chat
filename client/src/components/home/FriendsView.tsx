@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
-import { Users, UserPlus, MessageSquare, Phone, Video, Search, Sparkles, Zap, Shield, Volume2 } from 'lucide-react';
+import { 
+  Users, UserPlus, MessageSquare, Phone, Video, Search, Sparkles, 
+  Zap, Shield, Volume2, KeyRound, Check, Copy, Bot, ArrowRight 
+} from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNitroStore } from '../../store/useNitroStore';
+import { useServerStore } from '../../store/useServerStore';
 import NitroBadge from '../ui/NitroBadge';
 import { NitroModal } from '../modals/NitroModal';
-
+import { AiAssistantModal } from '../modals/AiAssistantModal';
 import DiscordNotificationBadge from '../ui/DiscordNotificationBadge';
 import clsx from 'clsx';
 
@@ -75,22 +79,53 @@ const MOCK_FRIENDS: Friend[] = [
 export const FriendsView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'online' | 'all' | 'pending' | 'blocked' | 'add'>('online');
   const [searchQuery, setSearchQuery] = useState('');
+  const [addInput, setAddInput] = useState('');
+  const [addSuccessMsg, setAddSuccessMsg] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [isNitroModalOpen, setIsNitroModalOpen] = useState(false);
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+
   const { user } = useAuthStore();
   const { isNitro, nitroTier } = useNitroStore();
+  const { joinServerByCode, servers } = useServerStore();
 
   const filteredFriends = MOCK_FRIENDS.filter((friend) => {
     if (activeTab === 'online') return friend.status !== 'OFFLINE';
     return true;
   }).filter((f) => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
+  const handleAddSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addInput.trim()) return;
+
+    try {
+      const joined = await joinServerByCode(addInput.trim());
+      setAddSuccessMsg(`Successfully joined ${joined.name || addInput}! 🎉`);
+      setAddInput('');
+      setTimeout(() => setAddSuccessMsg(null), 4000);
+    } catch {
+      setAddSuccessMsg(`Friend request / server join sent for "${addInput}"! ✨`);
+      setAddInput('');
+      setTimeout(() => setAddSuccessMsg(null), 4000);
+    }
+  };
+
+  const primaryServerCode = servers[0]?.inviteCode || 'PRO-HQ-8821';
+  const myInviteLink = typeof window !== 'undefined' ? `${window.location.origin}/?join=${primaryServerCode}` : '';
+
+  const handleCopyMyLink = () => {
+    navigator.clipboard.writeText(myInviteLink);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
+
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#0D0E12] overflow-hidden">
+    <div className="flex-1 flex flex-col h-full bg-[#0D0E12] overflow-hidden select-none">
       {/* Top Discord Friends Header Bar */}
       <div className="h-12 border-b border-[#171920] px-4 flex items-center justify-between shrink-0 bg-[#090A0D]">
         <div className="flex items-center space-x-4">
           <div className="flex items-center text-white font-extrabold text-sm mr-2">
-            <Users size={18} className="text-yellow-400 mr-2" />
+            <Users size={18} className="text-cyan-400 mr-2" />
             <span>Friends</span>
           </div>
 
@@ -103,7 +138,7 @@ export const FriendsView: React.FC = () => {
               className={clsx(
                 "px-3 py-1.5 rounded-lg transition-all cursor-pointer",
                 activeTab === 'online'
-                  ? "bg-yellow-400 text-black shadow-md shadow-yellow-400/20"
+                  ? "bg-cyan-400 text-black shadow-md shadow-cyan-400/20 font-black"
                   : "text-gray-400 hover:text-white hover:bg-white/5"
               )}
             >
@@ -114,7 +149,7 @@ export const FriendsView: React.FC = () => {
               className={clsx(
                 "px-3 py-1.5 rounded-lg transition-all cursor-pointer",
                 activeTab === 'all'
-                  ? "bg-yellow-400 text-black shadow-md shadow-yellow-400/20"
+                  ? "bg-cyan-400 text-black shadow-md shadow-cyan-400/20 font-black"
                   : "text-gray-400 hover:text-white hover:bg-white/5"
               )}
             >
@@ -125,7 +160,7 @@ export const FriendsView: React.FC = () => {
               className={clsx(
                 "px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1",
                 activeTab === 'pending'
-                  ? "bg-yellow-400 text-black shadow-md shadow-yellow-400/20"
+                  ? "bg-cyan-400 text-black shadow-md shadow-cyan-400/20 font-black"
                   : "text-gray-400 hover:text-white hover:bg-white/5"
               )}
             >
@@ -135,146 +170,227 @@ export const FriendsView: React.FC = () => {
             <button
               onClick={() => setActiveTab('add')}
               className={clsx(
-                "px-3 py-1.5 rounded-lg transition-all cursor-pointer font-extrabold flex items-center gap-1",
+                "px-3 py-1.5 rounded-lg transition-all cursor-pointer font-black flex items-center gap-1",
                 activeTab === 'add'
                   ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/20"
                   : "text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20"
               )}
             >
               <UserPlus size={14} />
-              <span>Add Friend</span>
+              <span>Add Friend / Join</span>
             </button>
           </div>
         </div>
 
-        {/* Right Action / Nitro Perk Banner */}
-        <button
-          onClick={() => setIsNitroModalOpen(true)}
-          className="flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-black font-extrabold text-xs rounded-xl shadow-lg shadow-yellow-400/20 transition-all hover:scale-105 cursor-pointer"
-        >
-          <Sparkles size={14} className="fill-black" />
-          <span>Nitro Perks</span>
-        </button>
+        {/* Right Actions: Ask AI & Nitro */}
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setIsAiModalOpen(true)}
+            className="flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-black text-xs rounded-xl shadow-md transition-all hover:scale-105 cursor-pointer"
+          >
+            <Bot size={14} />
+            <span>Ask Sam AI</span>
+          </button>
+
+          <button
+            onClick={() => setIsNitroModalOpen(true)}
+            className="flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-pink-500 to-yellow-400 text-black font-black text-xs rounded-xl shadow-lg transition-all hover:scale-105 cursor-pointer"
+          >
+            <Sparkles size={14} className="fill-black" />
+            <span>Nitro Perks</span>
+          </button>
+        </div>
       </div>
 
       {/* Friends Content Layout */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Main Friends List */}
+        {/* Main Friends List / Add Friend Screen */}
         <div className="flex-1 p-5 overflow-y-auto custom-scrollbar">
-          {/* Search bar */}
-          <div className="relative mb-6">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search friends..."
-              className="w-full bg-[#121418] border border-white/5 focus:border-yellow-400 rounded-xl px-4 py-2.5 pl-10 text-xs text-white outline-none transition-all placeholder-gray-500"
-            />
-            <Search size={16} className="absolute left-3.5 top-3 text-gray-400" />
-          </div>
-
-          <div className="text-[11px] font-black uppercase tracking-wider text-yellow-400/80 mb-3 px-1">
-            {activeTab.toUpperCase()} — {filteredFriends.length}
-          </div>
-
-          {/* Friends Rows */}
-          <div className="space-y-2">
-            {filteredFriends.map((friend) => (
-              <div
-                key={friend.id}
-                className="flex items-center justify-between p-3 rounded-2xl bg-[#121418]/60 hover:bg-[#161820] border border-white/5 hover:border-yellow-400/30 transition-all group shadow-sm hover:scale-[1.005]"
-              >
-                <div className="flex items-center space-x-3 truncate">
-                  <div className="relative shrink-0">
-                    <img
-                      src={friend.avatarUrl}
-                      alt={friend.name}
-                      className="w-10 h-10 rounded-full object-cover border border-white/10"
-                    />
-                    {/* Status Dot */}
-                    <div
-                      className={clsx(
-                        "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#0D0E12]",
-                        friend.status === 'ONLINE' && "bg-emerald-500",
-                        friend.status === 'IDLE' && "bg-amber-400",
-                        friend.status === 'DND' && "bg-rose-500",
-                        friend.status === 'OFFLINE' && "bg-gray-500"
-                      )}
-                    />
-                  </div>
-
-                  <div className="truncate">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-extrabold text-white text-sm group-hover:text-yellow-400 transition-colors">
-                        {friend.name}
-                      </span>
-                      {friend.isNitro && <NitroBadge tier={friend.nitroTier || 'nitro'} size="sm" />}
-                    </div>
-
-                    <div className="text-xs text-gray-400 truncate flex items-center gap-1.5 mt-0.5">
-                      {friend.activity ? (
-                        <span className="text-yellow-400/90 font-semibold flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-ping inline-block" />
-                          {friend.activity.type === 'PLAYING' && '🎮 Playing '}
-                          {friend.activity.type === 'STREAMING' && '📡 Streaming '}
-                          {friend.activity.type === 'LISTENING' && '🎵 Listening to '}
-                          {friend.activity.name}
-                        </span>
-                      ) : (
-                        <span>{friend.customStatus || (friend.status === 'ONLINE' ? 'Online' : 'Offline')}</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Friend Quick Actions & Badges */}
-                <div className="flex items-center space-x-2">
-                  {friend.unreadCount && (
-                    <DiscordNotificationBadge count={friend.unreadCount} size="md" variant="red" />
-                  )}
-
-                  <div className="flex items-center space-x-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
-                    <button
-                      className="w-9 h-9 rounded-xl bg-[#1C1E26] hover:bg-yellow-400 hover:text-black text-gray-300 flex items-center justify-center transition-all cursor-pointer shadow"
-                      title="Direct Message"
-                    >
-                      <MessageSquare size={16} />
-                    </button>
-                    <button
-                      className="w-9 h-9 rounded-xl bg-[#1C1E26] hover:bg-emerald-500 hover:text-white text-gray-300 flex items-center justify-center transition-all cursor-pointer shadow"
-                      title="Start Voice Call"
-                    >
-                      <Phone size={16} />
-                    </button>
-                    <button
-                      className="w-9 h-9 rounded-xl bg-[#1C1E26] hover:bg-yellow-400 hover:text-black text-gray-300 flex items-center justify-center transition-all cursor-pointer shadow"
-                      title="Start Video Call"
-                    >
-                      <Video size={16} />
-                    </button>
-                  </div>
-                </div>
+          {activeTab === 'add' ? (
+            /* ──────── ADD FRIEND & JOIN SERVER TAB ──────── */
+            <div className="max-w-2xl mx-auto py-6 space-y-6 animate-scale-up">
+              <div>
+                <h2 className="text-xl font-black text-white tracking-tight">
+                  ADD FRIEND OR JOIN A SERVER
+                </h2>
+                <p className="text-xs text-gray-400 mt-1">
+                  Enter a friend's server invite code (e.g. <strong className="text-cyan-400">PRO-HQ-8821</strong>, <strong className="text-pink-400">GAME-7799</strong>) or username to connect instantly!
+                </p>
               </div>
-            ))}
-          </div>
+
+              {/* Form Input */}
+              <form onSubmit={handleAddSubmit} className="space-y-3">
+                <div className="bg-[#121418] p-3 rounded-2xl border-2 border-cyan-400/40 flex items-center justify-between shadow-xl">
+                  <input
+                    type="text"
+                    value={addInput}
+                    onChange={(e) => setAddInput(e.target.value)}
+                    placeholder="Enter Server Code or Invite Link..."
+                    className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 outline-none px-2 font-mono"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!addInput.trim()}
+                    className={clsx(
+                      "px-5 py-2 rounded-xl font-black text-xs transition-all flex items-center space-x-1.5 cursor-pointer",
+                      addInput.trim()
+                        ? "bg-gradient-to-r from-cyan-400 to-blue-500 text-black shadow-md hover:scale-105 active:scale-95"
+                        : "bg-white/5 text-gray-500 cursor-not-allowed"
+                    )}
+                  >
+                    <span>Join Server</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+
+                {addSuccessMsg && (
+                  <div className="p-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold text-xs rounded-xl flex items-center space-x-2 animate-fade-in">
+                    <Check size={16} className="stroke-[3]" />
+                    <span>{addSuccessMsg}</span>
+                  </div>
+                )}
+              </form>
+
+              {/* Share Your Own Code Banner */}
+              <div className="p-5 rounded-3xl bg-[#0E121C] border border-pink-500/30 space-y-3 shadow-xl">
+                <div className="flex items-center space-x-2 text-pink-400 font-black text-xs uppercase tracking-wider">
+                  <KeyRound size={16} />
+                  <span>Share Your 1-Click Server Link With Friends</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-[#080A0F] rounded-2xl border border-white/10">
+                  <span className="font-mono text-xs text-cyan-300 truncate pr-3">{myInviteLink}</span>
+                  <button
+                    onClick={handleCopyMyLink}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white font-black text-xs shadow-md transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 flex items-center space-x-1"
+                  >
+                    {copiedLink ? <Check size={14} /> : <Copy size={14} />}
+                    <span>{copiedLink ? 'Copied Link!' : 'Copy Link'}</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  👉 Send this link to anyone on WhatsApp, Telegram, or Discord — they can click and join your ProChat server in 1 second!
+                </p>
+              </div>
+            </div>
+          ) : (
+            /* ──────── REGULAR FRIENDS LIST ──────── */
+            <>
+              {/* Search bar */}
+              <div className="relative mb-6">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search friends..."
+                  className="w-full bg-[#121418] border border-white/5 focus:border-cyan-400 rounded-xl px-4 py-2.5 pl-10 text-xs text-white outline-none transition-all placeholder-gray-500"
+                />
+                <Search size={16} className="absolute left-3.5 top-3 text-gray-400" />
+              </div>
+
+              <div className="text-[11px] font-black uppercase tracking-wider text-cyan-400 mb-3 px-1">
+                {activeTab.toUpperCase()} — {filteredFriends.length}
+              </div>
+
+              {/* Friends Rows */}
+              <div className="space-y-2">
+                {filteredFriends.map((friend) => (
+                  <div
+                    key={friend.id}
+                    className="flex items-center justify-between p-3 rounded-2xl bg-[#121418]/60 hover:bg-[#161820] border border-white/5 hover:border-cyan-400/30 transition-all group shadow-sm hover:scale-[1.005]"
+                  >
+                    <div className="flex items-center space-x-3 truncate">
+                      <div className="relative shrink-0">
+                        <img
+                          src={friend.avatarUrl}
+                          alt={friend.name}
+                          className="w-10 h-10 rounded-full object-cover border border-white/10"
+                        />
+                        {/* Status Dot */}
+                        <div
+                          className={clsx(
+                            "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#0D0E12]",
+                            friend.status === 'ONLINE' && "bg-emerald-500",
+                            friend.status === 'IDLE' && "bg-amber-400",
+                            friend.status === 'DND' && "bg-rose-500",
+                            friend.status === 'OFFLINE' && "bg-gray-500"
+                          )}
+                        />
+                      </div>
+
+                      <div className="truncate">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-extrabold text-white text-sm group-hover:text-cyan-300 transition-colors">
+                            {friend.name}
+                          </span>
+                          {friend.isNitro && <NitroBadge tier={friend.nitroTier || 'nitro'} size="sm" />}
+                        </div>
+
+                        <div className="text-xs text-gray-400 truncate flex items-center gap-1.5 mt-0.5">
+                          {friend.activity ? (
+                            <span className="text-cyan-400 font-semibold flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping inline-block" />
+                              {friend.activity.type === 'PLAYING' && '🎮 Playing '}
+                              {friend.activity.type === 'STREAMING' && '📡 Streaming '}
+                              {friend.activity.type === 'LISTENING' && '🎵 Listening to '}
+                              {friend.activity.name}
+                            </span>
+                          ) : (
+                            <span>{friend.customStatus || (friend.status === 'ONLINE' ? 'Online' : 'Offline')}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Friend Quick Actions & Badges */}
+                    <div className="flex items-center space-x-2">
+                      {friend.unreadCount && (
+                        <DiscordNotificationBadge count={friend.unreadCount} size="md" variant="red" />
+                      )}
+
+                      <div className="flex items-center space-x-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <button
+                          className="w-9 h-9 rounded-xl bg-[#1C1E26] hover:bg-cyan-400 hover:text-black text-gray-300 flex items-center justify-center transition-all cursor-pointer shadow"
+                          title="Direct Message"
+                        >
+                          <MessageSquare size={16} />
+                        </button>
+                        <button
+                          className="w-9 h-9 rounded-xl bg-[#1C1E26] hover:bg-emerald-500 hover:text-white text-gray-300 flex items-center justify-center transition-all cursor-pointer shadow"
+                          title="Start Voice Call"
+                        >
+                          <Phone size={16} />
+                        </button>
+                        <button
+                          className="w-9 h-9 rounded-xl bg-[#1C1E26] hover:bg-cyan-400 hover:text-black text-gray-300 flex items-center justify-center transition-all cursor-pointer shadow"
+                          title="Start Video Call"
+                        >
+                          <Video size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Active Now Sidebar (Discord Style) */}
         <div className="w-80 bg-[#090A0D] border-l border-[#171920] p-4 hidden lg:block overflow-y-auto custom-scrollbar">
           <h3 className="font-extrabold text-white text-sm tracking-tight mb-3">Active Now</h3>
           <div className="space-y-3">
-            <div className="p-3 rounded-2xl bg-[#121418] border border-white/5 hover:border-yellow-400/20 transition-all">
+            <div className="p-3 rounded-2xl bg-[#121418] border border-white/5 hover:border-cyan-400/20 transition-all">
               <div className="flex items-center space-x-2.5 mb-2">
                 <img
                   src="https://api.dicebear.com/7.x/bottts/svg?seed=NeonAura"
                   alt="NeonAura"
-                  className="w-8 h-8 rounded-full border border-yellow-400"
+                  className="w-8 h-8 rounded-full border border-cyan-400"
                 />
                 <div>
                   <div className="text-xs font-bold text-white flex items-center gap-1">
                     NeonAura <NitroBadge tier="nitro" size="sm" />
                   </div>
-                  <div className="text-[10px] text-yellow-400 font-semibold">Streaming in 1080p 60FPS</div>
+                  <div className="text-[10px] text-cyan-400 font-semibold">Streaming in 1080p 60FPS</div>
                 </div>
               </div>
               <div className="bg-[#08090B] p-2.5 rounded-xl border border-white/5">
@@ -283,12 +399,12 @@ export const FriendsView: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-3 rounded-2xl bg-[#121418] border border-white/5 hover:border-yellow-400/20 transition-all">
+            <div className="p-3 rounded-2xl bg-[#121418] border border-white/5 hover:border-cyan-400/20 transition-all">
               <div className="flex items-center space-x-2.5 mb-2">
                 <img
                   src="https://api.dicebear.com/7.x/bottts/svg?seed=CyberNinja"
                   alt="CyberNinja"
-                  className="w-8 h-8 rounded-full border border-yellow-400"
+                  className="w-8 h-8 rounded-full border border-cyan-400"
                 />
                 <div>
                   <div className="text-xs font-bold text-white flex items-center gap-1">
@@ -298,8 +414,8 @@ export const FriendsView: React.FC = () => {
                 </div>
               </div>
               <div className="bg-[#08090B] p-2.5 rounded-xl border border-white/5">
-                <div className="text-xs font-bold text-white">Pro Chat HQ / Gaming Room 🎮</div>
-                <div className="text-[11px] text-gray-400">3 users connected</div>
+                <div className="text-xs font-bold text-white">Pro Chat HQ / General Voice</div>
+                <div className="text-[11px] text-gray-400">Connected in HD Call</div>
               </div>
             </div>
           </div>
@@ -307,6 +423,7 @@ export const FriendsView: React.FC = () => {
       </div>
 
       <NitroModal isOpen={isNitroModalOpen} onClose={() => setIsNitroModalOpen(false)} />
+      <AiAssistantModal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} />
     </div>
   );
 };

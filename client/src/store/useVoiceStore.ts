@@ -21,6 +21,7 @@ interface VoiceState {
   peers: Record<string, VoicePeer>;
   myPeerId: string | null;
   isConnecting: boolean;
+  localScreenStream: MediaStream | null;
   joinVoiceChannel: (
     channelId: string,
     currentUser: { id: string; name: string; avatarUrl?: string },
@@ -33,7 +34,7 @@ interface VoiceState {
     isCameraOn?: boolean;
     isScreenSharing?: boolean;
   }) => void;
-  startScreenShare: (serverInviteCode?: string) => Promise<void>;
+  startScreenShare: (serverInviteCode?: string) => Promise<MediaStream | null>;
   stopScreenShare: () => void;
 }
 
@@ -57,6 +58,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   peers: {},
   myPeerId: null,
   isConnecting: false,
+  localScreenStream: null,
 
   joinVoiceChannel: (channelId, currentUser, serverInviteCode) => {
     get().leaveVoiceChannel();
@@ -83,9 +85,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       .getUserMedia({ audio: true, video: false })
       .catch(() => {
         // Mic denied — create silent stream so PeerJS still works
-        const ctx = new AudioContext();
-        const dest = ctx.createMediaStreamDestination();
-        return dest.stream;
+        try {
+          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const dest = ctx.createMediaStreamDestination();
+          return dest.stream;
+        } catch {
+          return new MediaStream();
+        }
       })
       .then(async (micStream) => {
         _micStream = micStream;
@@ -119,7 +125,6 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
             onPeerLeave: (remotePeerId) => {
               set((state) => {
                 const next = { ...state.peers };
-                // Remove by peerId match
                 Object.keys(next).forEach((k) => {
                   if (next[k].peerId === remotePeerId || k === remotePeerId) delete next[k];
                 });
@@ -138,10 +143,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           }));
 
           // Announce presence with PeerJS ID via MQTT so others can call us
-          cloudRelay.publish(currentTopic!, {
-            type: 'VOICE_JOIN',
-            peer: { ...me, peerId: myPeerId },
-          });
+          if (currentTopic) {
+            cloudRelay.publish(currentTopic, {
+              type: 'VOICE_JOIN',
+              peer: { ...me, peerId: myPeerId },
+            });
+          }
         } catch (err) {
           console.warn('[Voice] PeerJS init failed:', err);
           set({ isConnecting: false });
@@ -173,19 +180,15 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
         // If they just joined and we have a PeerJS ID, call them
         if (data.type === 'VOICE_JOIN' && incoming.peerId) {
-          console.log('[Voice] New peer joined, calling via PeerJS:', incoming.peerId);
           const myState = get().peers[myId];
-          // Reply with our presence
           if (myState && currentTopic) {
             cloudRelay.publish(currentTopic, {
               type: 'VOICE_HEARTBEAT',
               peer: { ...myState, peerId: peerJSManager.getMyPeerId() },
             });
           }
-          // Call them via PeerJS
           peerJSManager.callPeer(_currentInviteCode, incoming.id);
         } else if (data.type === 'VOICE_HEARTBEAT' && incoming.peerId && !peers[incoming.id]?.remoteStream) {
-          // Heartbeat from someone we don't have a stream from — try calling
           peerJSManager.callPeer(_currentInviteCode, incoming.id);
         }
       } else if (data.type === 'VOICE_UPDATE') {
@@ -238,12 +241,16 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   },
 
   leaveVoiceChannel: () => {
-    const { activeVoiceChannelId, peers } = get();
+    const { activeVoiceChannelId, peers, localScreenStream } = get();
     if (!activeVoiceChannelId) return;
 
     const myPeer = Object.values(peers).find(p => p.isYou);
     if (myPeer && currentTopic) {
       cloudRelay.publish(currentTopic, { type: 'VOICE_LEAVE', userId: myPeer.id });
+    }
+
+    if (localScreenStream) {
+      localScreenStream.getTracks().forEach(t => t.stop());
     }
 
     peerJSManager.cleanup();
@@ -257,16 +264,30 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     currentTopic = null;
     _currentUserId = '';
     _currentInviteCode = '';
-    set({ activeVoiceChannelId: null, peers: {}, myPeerId: null, isConnecting: false });
+    set({ 
+      activeVoiceChannelId: null, 
+      peers: {}, 
+      myPeerId: null, 
+      isConnecting: false,
+      localScreenStream: null 
+    });
   },
 
   startScreenShare: async () => {
     try {
       const screenStream = await (navigator.mediaDevices as any).getDisplayMedia({
-        video: { frameRate: 30, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: { 
+          frameRate: 30, 
+          width: { ideal: 1920 }, 
+          height: { ideal: 1080 } 
+        },
         audio: true,
       });
 
+      // Save local screen stream to store
+      set({ localScreenStream: screenStream });
+
+      // Replace WebRTC track with screen video
       await peerJSManager.replaceStream(screenStream);
 
       const { peers } = get();
@@ -279,17 +300,24 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       }
 
       screenStream.getVideoTracks()[0].onended = () => get().stopScreenShare();
+      return screenStream;
     } catch (err) {
       console.warn('[ScreenShare] Cancelled or denied:', err);
+      return null;
     }
   },
 
   stopScreenShare: () => {
+    const { localScreenStream, peers } = get();
+    if (localScreenStream) {
+      localScreenStream.getTracks().forEach(t => t.stop());
+      set({ localScreenStream: null });
+    }
+
     if (_micStream) {
       peerJSManager.replaceStream(_micStream).catch(() => {});
     }
 
-    const { peers } = get();
     const myEntry = Object.entries(peers).find(([, p]) => p.isYou);
     if (myEntry) {
       const [myId, myPeer] = myEntry;
