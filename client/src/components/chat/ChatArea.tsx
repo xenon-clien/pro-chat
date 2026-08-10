@@ -103,9 +103,9 @@ export const ChatArea: React.FC = () => {
   const isAiChannel = activeChannel.id === 'ch-ai-bot' || activeChannel.name.includes('ai') || activeChannel.name.includes('bot');
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#0B0E14] min-w-0 overflow-hidden select-none">
-      {/* Channel Header Bar */}
-      <div className="h-14 border-b border-[#181D2A] px-6 flex items-center justify-between shrink-0 bg-[#0E121B]">
+    <div className="flex-1 flex flex-col h-full bg-[#080B11] min-w-0 overflow-hidden select-none">
+      {/* ──────── TOP HEADER BAR (MATCHING SCREENSHOT) ──────── */}
+      <div className="h-14 border-b border-[#141A28] px-6 flex items-center justify-between shrink-0 bg-[#0B0E17]">
         <div className="flex items-center space-x-3 min-w-0">
           {isAiChannel ? (
             <Bot size={22} className="text-cyan-400 shrink-0" />
@@ -118,55 +118,56 @@ export const ChatArea: React.FC = () => {
           <div className="h-4 w-[1px] bg-white/10 mx-1 shrink-0" />
           <span className="text-xs text-gray-400 truncate hidden sm:inline">
             {isAiChannel 
-              ? '🤖 24/7 ProChat AI Support & Help Assistant'
-              : `Welcome to #${activeChannel.name} of ${activeServer.name}`}
+              ? '🤖 24/7 ProChat AI Support & Chatbot'
+              : `Welcome to #${activeChannel.name} • Hangout & Voice`}
           </span>
         </div>
 
         {/* Action Icons */}
         <div className="flex items-center space-x-2 shrink-0">
-          {/* AI Assistant Quick Launcher */}
-          <button 
-            onClick={() => setIsAiModalOpen(true)}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-xs rounded-xl shadow-md shadow-cyan-500/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-            title="Ask Sam AI Assistant"
+          {/* Notification Bell */}
+          <button
+            onClick={() => setIsMutedNotifications(!isMutedNotifications)}
+            className="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-white/5 transition-colors cursor-pointer"
+            title={isMutedNotifications ? "Unmute Channel" : "Mute Channel"}
           >
-            <Bot size={15} />
-            <span>Ask Sam AI</span>
+            {isMutedNotifications ? <BellOff size={17} className="text-rose-400" /> : <Bell size={17} />}
           </button>
 
-          {/* Invite Friends Button */}
-          <button 
-            onClick={() => setIsInviteModalOpen(true)}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#161B28] hover:bg-pink-500/20 border border-pink-400/30 text-pink-300 font-black text-xs rounded-xl transition-all cursor-pointer"
-            title="Invite Friends"
+          {/* Pin */}
+          <button
+            onClick={() => setIsPinnedOpen(!isPinnedOpen)}
+            className="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-white/5 transition-colors cursor-pointer"
+            title="Pinned Messages"
           >
-            <UserPlus size={14} />
-            <span className="hidden md:inline">Invite</span>
+            <Pin size={17} />
+          </button>
+
+          {/* Member List Toggle (Cyan circle when active) */}
+          <button 
+            onClick={() => setIsMemberListOpen(!isMemberListOpen)}
+            className={clsx(
+              "w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer",
+              isMemberListOpen 
+                ? "bg-cyan-400 text-black shadow-md shadow-cyan-400/30" 
+                : "text-gray-400 hover:text-white hover:bg-white/5"
+            )}
+            title="Toggle Member List"
+          >
+            <Users size={16} />
           </button>
 
           {/* Search Box */}
-          <div className="relative hidden md:block">
+          <div className="relative hidden md:block ml-1">
             <input 
               type="text" 
               placeholder="Search..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-[#141824] text-xs text-white rounded-xl pl-8 pr-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-cyan-400 w-36 focus:w-48 transition-all border border-white/5"
+              className="bg-[#121624] text-xs text-white rounded-xl pl-3 pr-8 py-1.5 focus:outline-none focus:ring-1 focus:ring-cyan-400 w-36 focus:w-48 transition-all border border-white/5 placeholder-gray-500"
             />
-            <Search size={14} className="absolute left-2.5 top-2 text-gray-400" />
+            <Search size={14} className="absolute right-2.5 top-2 text-gray-400" />
           </div>
-
-          <button 
-            onClick={() => setIsMemberListOpen(!isMemberListOpen)}
-            className={clsx(
-              "p-2 rounded-xl transition-colors cursor-pointer",
-              isMemberListOpen ? "bg-cyan-500/20 text-cyan-400" : "text-gray-400 hover:text-white hover:bg-white/5"
-            )}
-            title="Toggle Member List"
-          >
-            <Users size={18} />
-          </button>
         </div>
       </div>
 
@@ -174,85 +175,93 @@ export const ChatArea: React.FC = () => {
       <div className="flex-1 flex overflow-hidden">
         {/* Messages Stream Container */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4 flex flex-col justify-start">
-          {/* Hero Welcome Header */}
-          <div className="text-center py-6 px-4 mb-2 bg-[#0E121C] rounded-3xl border border-cyan-500/20 shadow-xl flex flex-col items-center justify-center animate-fade-in shrink-0">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-400 via-blue-500 to-pink-500 flex items-center justify-center mb-3 shadow-lg shadow-cyan-500/20 animate-scale-up">
-              {isAiChannel ? (
-                <Bot size={34} className="text-black" />
-              ) : (
-                <Hash size={34} className="text-black stroke-[2.5]" />
-              )}
+          {/* ──────── HERO WELCOME HEADER (PIXEL-PERFECT MATCHING SCREENSHOT) ──────── */}
+          <div className="text-center py-8 px-4 mb-3 flex flex-col items-center justify-center animate-fade-in shrink-0">
+            {/* Glowing Rounded Hash/Bot Emblem with Sparkle Badge */}
+            <div className="relative mb-4 animate-scale-up">
+              <div className="w-20 h-20 rounded-3xl bg-[#0B101D] border-2 border-cyan-400 shadow-2xl shadow-cyan-500/25 flex items-center justify-center">
+                {isAiChannel ? (
+                  <Bot size={40} className="text-cyan-300" />
+                ) : (
+                  <Hash size={40} className="text-cyan-400 stroke-[2.5]" />
+                )}
+              </div>
+              {/* Pink Sparkle/Star Badge on top right */}
+              <div className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-pink-500 border-2 border-[#080B11] flex items-center justify-center shadow-lg shadow-pink-500/30">
+                <Sparkles size={12} className="text-white fill-white" />
+              </div>
             </div>
 
+            {/* Welcome Heading */}
             <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white mb-2">
-              Welcome to <span className="bg-gradient-to-r from-cyan-300 via-pink-400 to-yellow-300 bg-clip-text text-transparent">#{activeChannel.name}</span>!
+              Welcome to <span className="text-cyan-400">#{activeChannel.name}!</span> 👋
             </h1>
-            <p className="text-gray-400 text-xs md:text-sm max-w-md mx-auto leading-relaxed">
+            <p className="text-gray-400 text-xs md:text-sm max-w-lg mx-auto leading-relaxed">
               {isAiChannel ? (
-                <>This is the 24/7 AI Assistant channel with <strong className="text-cyan-300">Sam</strong>. Ask any question about screen sharing, voice channels, billing, or server invites!</>
+                <>This is the 24/7 AI Chatbot channel with <strong className="text-cyan-300">Sam AI</strong>. Ask anything about screen sharing, voice channels, billing, or server invites!</>
               ) : (
-                <>This is the start of the <strong className="text-cyan-300">#{activeChannel.name}</strong> channel. Send a wave, hop into voice, or invite your friends!</>
+                <>This is the very start of the <strong className="text-cyan-300">#{activeChannel.name}</strong> channel. Send a wave, hop into voice, or invite your friends to start chatting!</>
               )}
             </p>
 
-            {/* Quick Starter Action Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 w-full max-w-2xl">
+            {/* 4 Action Cards Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mt-6 w-full max-w-2xl">
               {isAiChannel ? (
                 <>
                   <button
                     onClick={() => sendMessage(activeChannel.id, 'How do I fix blank screen sharing?')}
-                    className="p-3 rounded-2xl bg-[#141926] hover:bg-cyan-400 hover:text-black text-gray-200 border border-white/10 hover:border-cyan-400 transition-all flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
+                    className="p-3.5 rounded-2xl bg-[#0F1422] hover:bg-cyan-500/10 border border-[#1C2538] hover:border-cyan-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group hover:scale-[1.02]"
                   >
                     <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">📺</span>
-                    <span className="text-xs font-black">Screen Share</span>
-                    <span className="text-[10px] text-gray-400 group-hover:text-black/80">Blank screen fix</span>
+                    <span className="text-xs font-black text-white group-hover:text-cyan-300">Screen Share</span>
+                    <span className="text-[10px] text-gray-400">Blank screen fix</span>
                   </button>
 
                   <button
                     onClick={() => sendMessage(activeChannel.id, 'How do I invite friends with server code?')}
-                    className="p-3 rounded-2xl bg-[#141926] hover:bg-pink-500 hover:text-white text-gray-200 border border-white/10 hover:border-pink-400 transition-all flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
+                    className="p-3.5 rounded-2xl bg-[#0F1422] hover:bg-pink-500/10 border border-[#1C2538] hover:border-pink-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group hover:scale-[1.02]"
                   >
                     <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">👥</span>
-                    <span className="text-xs font-black">Invite Friends</span>
-                    <span className="text-[10px] text-gray-400 group-hover:text-white/80">1-click join guide</span>
+                    <span className="text-xs font-black text-white group-hover:text-pink-300">Invite Friends</span>
+                    <span className="text-[10px] text-gray-400">Server code</span>
                   </button>
 
                   <button
                     onClick={() => sendMessage(activeChannel.id, 'What are the Nitro subscription features?')}
-                    className="p-3 rounded-2xl bg-[#141926] hover:bg-yellow-400 hover:text-black text-gray-200 border border-white/10 hover:border-yellow-400 transition-all flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
+                    className="p-3.5 rounded-2xl bg-[#0F1422] hover:bg-amber-500/10 border border-[#1C2538] hover:border-amber-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group hover:scale-[1.02]"
                   >
                     <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">⚡</span>
-                    <span className="text-xs font-black">Nitro & Perks</span>
-                    <span className="text-[10px] text-gray-400 group-hover:text-black/80">Badges & 60FPS</span>
+                    <span className="text-xs font-black text-white group-hover:text-amber-300">Nitro & Gifts</span>
+                    <span className="text-[10px] text-gray-400">Unlock perks</span>
                   </button>
 
                   <button
                     onClick={() => sendMessage(activeChannel.id, 'How do I use HD Voice and Soundboard?')}
-                    className="p-3 rounded-2xl bg-[#141926] hover:bg-cyan-400 hover:text-black text-gray-200 border border-white/10 hover:border-cyan-400 transition-all flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
+                    className="p-3.5 rounded-2xl bg-[#0F1422] hover:bg-cyan-500/10 border border-[#1C2538] hover:border-cyan-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group hover:scale-[1.02]"
                   >
                     <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">🎙️</span>
-                    <span className="text-xs font-black">HD Voice Call</span>
-                    <span className="text-[10px] text-gray-400 group-hover:text-black/80">Soundboard guide</span>
+                    <span className="text-xs font-black text-white group-hover:text-cyan-300">Join Voice</span>
+                    <span className="text-[10px] text-gray-400">HD Talk & Video</span>
                   </button>
                 </>
               ) : (
                 <>
                   <button
                     onClick={handleSendWave}
-                    className="p-3 rounded-2xl bg-[#141926] hover:bg-cyan-400 hover:text-black text-gray-200 border border-white/10 hover:border-cyan-400 transition-all flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
+                    className="p-3.5 rounded-2xl bg-[#0F1422] hover:bg-cyan-500/10 border border-[#1C2538] hover:border-cyan-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group hover:scale-[1.02]"
                   >
                     <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">👋</span>
-                    <span className="text-xs font-black">Send a Wave</span>
-                    <span className="text-[10px] text-gray-400 group-hover:text-black/80">Say hello!</span>
+                    <span className="text-xs font-black text-white group-hover:text-cyan-300">Send a Wave</span>
+                    <span className="text-[10px] text-gray-400">Say hello!</span>
                   </button>
 
                   <button
                     onClick={() => setIsInviteModalOpen(true)}
-                    className="p-3 rounded-2xl bg-[#141926] hover:bg-pink-500 hover:text-white text-gray-200 border border-white/10 hover:border-pink-400 transition-all flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
+                    className="p-3.5 rounded-2xl bg-[#0F1422] hover:bg-pink-500/10 border border-[#1C2538] hover:border-pink-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group hover:scale-[1.02]"
                   >
                     <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">👥</span>
-                    <span className="text-xs font-black">Invite Friends</span>
-                    <span className="text-[10px] text-gray-400 group-hover:text-white/80">Server code</span>
+                    <span className="text-xs font-black text-white group-hover:text-pink-300">Invite Friends</span>
+                    <span className="text-[10px] text-gray-400">Server code</span>
                   </button>
 
                   <button
@@ -260,20 +269,20 @@ export const ChatArea: React.FC = () => {
                       const voiceCh = activeServer?.channels.find(c => c.type === 'VOICE');
                       if (voiceCh) setActiveChannel(voiceCh.id);
                     }}
-                    className="p-3 rounded-2xl bg-[#141926] hover:bg-cyan-400 hover:text-black text-gray-200 border border-white/10 hover:border-cyan-400 transition-all flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
+                    className="p-3.5 rounded-2xl bg-[#0F1422] hover:bg-cyan-500/10 border border-[#1C2538] hover:border-cyan-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group hover:scale-[1.02]"
                   >
                     <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">🎙️</span>
-                    <span className="text-xs font-black">Join Voice</span>
-                    <span className="text-[10px] text-gray-400 group-hover:text-black/80">HD Talk & Video</span>
+                    <span className="text-xs font-black text-white group-hover:text-cyan-300">Join Voice</span>
+                    <span className="text-[10px] text-gray-400">HD Talk & Video</span>
                   </button>
 
                   <button
                     onClick={() => setIsNitroModalOpen(true)}
-                    className="p-3 rounded-2xl bg-[#141926] hover:bg-gradient-to-tr hover:from-pink-500 hover:to-yellow-400 hover:text-black text-gray-200 border border-white/10 hover:border-yellow-400 transition-all flex flex-col items-center justify-center text-center cursor-pointer shadow-md group"
+                    className="p-3.5 rounded-2xl bg-[#0F1422] hover:bg-amber-500/10 border border-[#1C2538] hover:border-amber-400 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer shadow-md group hover:scale-[1.02]"
                   >
                     <span className="text-2xl mb-1 group-hover:scale-125 transition-transform">⚡</span>
-                    <span className="text-xs font-black">Nitro & Gifts</span>
-                    <span className="text-[10px] text-gray-400 group-hover:text-black/80">Unlock perks</span>
+                    <span className="text-xs font-black text-white group-hover:text-amber-300">Nitro & Gifts</span>
+                    <span className="text-[10px] text-gray-400">Unlock perks</span>
                   </button>
                 </>
               )}
@@ -284,12 +293,12 @@ export const ChatArea: React.FC = () => {
             <div className="text-cyan-400/60 text-center w-full py-4 text-xs font-bold">Loading messages...</div>
           ) : (
             <>
-              {/* Message List Items */}
-              {filteredMessages.slice().reverse().map((msg) => {
+              {/* Message List Items (Direct chronological order from top to bottom) */}
+              {filteredMessages.map((msg) => {
                 const isAuthorBot = msg.author.isBot || msg.author.id.includes('bot');
 
                 return (
-                  <div key={msg.id} className="group hover:bg-[#111522] -mx-4 px-4 py-2.5 rounded-2xl transition-colors border border-transparent hover:border-cyan-500/15">
+                  <div key={msg.id} className="group hover:bg-[#0D111A] -mx-4 px-4 py-2.5 rounded-2xl transition-colors border border-transparent hover:border-white/5">
                     <div className="flex items-start">
                       <img 
                         src={msg.author.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${msg.author.name}&backgroundColor=fbbf24`} 
@@ -340,8 +349,8 @@ export const ChatArea: React.FC = () => {
           )}
         </div>
 
-        {/* Input Area */}
-        <div className="px-6 pb-6 pt-2 shrink-0 relative bg-[#0E121B]">
+        {/* ──────── INPUT BAR (MATCHING SCREENSHOT) ──────── */}
+        <div className="px-6 pb-6 pt-2 shrink-0 relative bg-[#080B11]">
           {/* Emoji Picker Popover */}
           <EmojiPicker 
             isOpen={isEmojiPickerOpen} 
@@ -375,12 +384,12 @@ export const ChatArea: React.FC = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="bg-[#111522] border border-[#1D2538] focus-within:border-cyan-400/70 focus-within:ring-2 focus-within:ring-cyan-400/20 rounded-2xl flex items-center px-4 py-3 shadow-xl transition-all">
+          <form onSubmit={handleSubmit} className="bg-[#0F1422] border border-[#1A2234] focus-within:border-cyan-400/70 focus-within:ring-2 focus-within:ring-cyan-400/20 rounded-2xl flex items-center px-4 py-3 shadow-xl transition-all">
             {/* Attachment Button */}
             <button 
               type="button" 
               onClick={() => handleEmojiSelect(' 📎 ')} 
-              className="text-gray-400 hover:text-cyan-400 transition-colors p-1 mr-2 shrink-0 rounded-xl hover:bg-[#161B28] cursor-pointer"
+              className="text-gray-400 hover:text-cyan-400 transition-colors p-1 mr-2 shrink-0 rounded-xl hover:bg-white/5 cursor-pointer"
               title="Add Attachment"
             >
               <Plus size={18} />
@@ -391,36 +400,36 @@ export const ChatArea: React.FC = () => {
               type="text" 
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder={isAiChannel ? "Ask Sam anything (or type @Sam in any channel)..." : `Message #${activeChannel.name}...`}
+              placeholder={isAiChannel ? "Ask Sam AI Chatbot anything..." : `Message #${activeChannel.name}...`}
               className="bg-transparent flex-1 text-sm text-white placeholder-gray-500 focus:outline-none"
             />
 
-            <div className="flex items-center space-x-1.5 ml-2">
-              {/* Nitro Gift Button */}
+            <div className="flex items-center space-x-2 ml-2">
+              {/* Nitro Gift Bolt Button */}
               <button 
                 type="button" 
                 onClick={() => setIsNitroModalOpen(true)}
-                className="text-pink-400 hover:text-pink-300 transition-colors p-1.5 rounded-xl hover:bg-[#161B28] cursor-pointer"
+                className="text-pink-400 hover:text-pink-300 transition-colors p-1.5 rounded-xl hover:bg-white/5 cursor-pointer"
                 title="Gift Nitro"
               >
-                <Gift size={18} />
+                <Zap size={18} className="fill-pink-400 text-pink-400" />
               </button>
 
               {/* GIF Button */}
               <button 
                 type="button" 
                 onClick={() => setIsGifsOpen(!isGifsOpen)}
-                className="text-gray-400 hover:text-cyan-400 transition-colors p-1.5 rounded-xl hover:bg-[#161B28] font-bold text-xs cursor-pointer"
+                className="text-gray-400 hover:text-cyan-400 transition-colors p-1.5 rounded-xl hover:bg-white/5 font-bold text-xs cursor-pointer"
                 title="Send GIF"
               >
-                GIF
+                <FileImage size={18} />
               </button>
 
               {/* Emoji Button */}
               <button 
                 type="button" 
                 onClick={() => setIsEmojiPickerOpen(!isEmojiPickerOpen)}
-                className="text-gray-400 hover:text-yellow-400 transition-colors p-1.5 rounded-xl hover:bg-[#161B28] cursor-pointer"
+                className="text-gray-400 hover:text-yellow-400 transition-colors p-1.5 rounded-xl hover:bg-white/5 cursor-pointer"
                 title="Add Emoji"
               >
                 <Smile size={18} />
@@ -431,14 +440,15 @@ export const ChatArea: React.FC = () => {
                 type="submit" 
                 disabled={!content.trim()}
                 className={clsx(
-                  "p-2 rounded-xl transition-all cursor-pointer",
+                  "px-3 py-1.5 rounded-xl font-bold text-xs flex items-center space-x-1 transition-all cursor-pointer",
                   content.trim() 
                     ? "bg-gradient-to-r from-cyan-400 to-blue-500 text-black hover:scale-105 shadow-md shadow-cyan-400/20" 
                     : "text-gray-600 cursor-not-allowed"
                 )}
                 title="Send Message"
               >
-                <Send size={16} />
+                <Send size={14} />
+                <span>Send</span>
               </button>
             </div>
           </form>
