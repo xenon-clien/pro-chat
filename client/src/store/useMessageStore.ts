@@ -3,7 +3,7 @@ import api from '../lib/api';
 import cloudRelay from '../lib/cloudRelay';
 import { generateAiBotResponse, SAM_BOT_USER } from '../services/aiBotService';
 
-// ── Global server invite code getter (injected externally to avoid circular import) ──
+// ── Global server invite code getter ──
 let _getActiveServerInviteCode: (() => string | null) = () => null;
 export function registerServerCodeGetter(fn: () => string | null) {
   _getActiveServerInviteCode = fn;
@@ -50,7 +50,7 @@ const SEED_MESSAGES: Record<string, Message[]> = {
   'ch-ai-bot': [
     {
       id: 'msg-ai-welcome',
-      content: "Hi there! Thanks for reaching out to ProChat support. I'm **Sam**—your dedicated ProChat AI Assistant! 🤖✨\n\nAsk me anything about:\n• 📺 **Screen Sharing & HD Video Streaming**\n• 👥 **Server Invites & Friends Auto-Join**\n• ⚡ **ProChat Nitro & Billing Support**\n• 🎙️ **HD Voice Channels & Soundboard**\n• 🎨 **Custom Profile Picture & Banner Setup**",
+      content: "Hi there! Thanks for reaching out to ProChat support. I'm **Sam**—your dedicated ProChat AI Assistant! 🤖✨\n\nAsk me anything about:\n• 📺 **Screen Sharing & HD Video Streaming**\n• 👥 **Server Invites & Friends Auto-Join**\n• ⚡ **ProChat Nitro & Billing Support**\n• 🎙️ **HD Voice Channels & Soundboard**",
       createdAt: new Date(Date.now() - 1800000).toISOString(),
       author: {
         id: SAM_BOT_USER.id,
@@ -81,16 +81,12 @@ const playNotificationChime = () => {
 };
 
 /**
- * Returns a globally-shared MQTT topic so all users in same server share messages.
- * Uses inviteCode (injected from useServerStore) as the key — same for creator and joiner.
+ * Returns a globally-shared MQTT topic so all users in same server share messages in real time.
  */
 function getSharedTopic(channelId: string): string {
-  const inviteCode = _getActiveServerInviteCode();
-  if (inviteCode) {
-    const channelType = channelId.toLowerCase().includes('voice') ? 'voice' : 'text';
-    return `prochat/v1/s/${inviteCode.toUpperCase().replace(/[^A-Z0-9]/g, '-')}/${channelType}`;
-  }
-  return `prochat/v1/ch/${channelId}`;
+  const inviteCode = _getActiveServerInviteCode() || 'PRO-HQ-8821';
+  const cleanCode = inviteCode.toUpperCase().replace(/[^A-Z0-9]/g, '-');
+  return `prochat/v2/s/${cleanCode}/text`;
 }
 
 let currentUnsub: (() => void) | null = null;
@@ -170,7 +166,7 @@ export const useMessageStore = create<MessageState>((set, get) => {
         content,
         createdAt: new Date().toISOString(),
         author: {
-          id: currentUser.id || 'guest-anon',
+          id: currentUser.id || 'guest-' + Math.random().toString(36).substring(2, 6),
           name: currentUser.name || 'Pro Member',
           avatarUrl:
             currentUser.avatarUrl ||
@@ -185,12 +181,12 @@ export const useMessageStore = create<MessageState>((set, get) => {
       // Broadcast to all users on same server via MQTT
       cloudRelay.publish(topic, msg);
 
-      // Backend
+      // Backend API
       try {
         await api.post(`/messages/${channelId}`, { content });
       } catch (err: any) {}
 
-      // 🤖 Trigger AI Bot "Sam" Response if messaging in AI channel or mentioning Sam
+      // 🤖 AI Bot "Sam" Response Trigger
       const isAiChannel = channelId === 'ch-ai-bot' || channelId.includes('ai');
       const mentionsSam = content.toLowerCase().includes('@sam') || 
                           content.toLowerCase().includes('@ai') || 

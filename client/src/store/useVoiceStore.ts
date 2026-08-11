@@ -178,7 +178,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           },
         }));
 
-        // If they just joined and we have a PeerJS ID, call them
+        // If they just joined and we have a PeerJS ID, call them directly
         if (data.type === 'VOICE_JOIN' && incoming.peerId) {
           const myState = get().peers[myId];
           if (myState && currentTopic) {
@@ -187,9 +187,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
               peer: { ...myState, peerId: peerJSManager.getMyPeerId() },
             });
           }
-          peerJSManager.callPeer(_currentInviteCode, incoming.id);
+          peerJSManager.callPeerDirect(incoming.peerId);
         } else if (data.type === 'VOICE_HEARTBEAT' && incoming.peerId && !peers[incoming.id]?.remoteStream) {
-          peerJSManager.callPeer(_currentInviteCode, incoming.id);
+          peerJSManager.callPeerDirect(incoming.peerId);
         }
       } else if (data.type === 'VOICE_UPDATE') {
         const p: VoicePeer = data.peer;

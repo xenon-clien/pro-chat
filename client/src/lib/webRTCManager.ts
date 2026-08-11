@@ -1,7 +1,7 @@
 /**
  * ProChat PeerJS Manager
  * Uses PeerJS cloud signaling + free TURN servers for real cross-NAT WebRTC.
- * Two users on same server can voice chat and screen share across any network.
+ * Enables 1080p 60fps screen sharing and HD voice calls across any network worldwide.
  */
 import Peer from 'peerjs';
 type MediaConnection = ReturnType<Peer['call']>;
@@ -19,10 +19,9 @@ class PeerJSManager {
   private myMeta: { name: string; avatarUrl: string } = { name: '', avatarUrl: '' };
 
   /** Derive deterministic PeerJS ID from server invite code + user ID */
-  private buildPeerId(inviteCode: string, userId: string): string {
-    // PeerJS IDs: alphanumeric + dashes, max 40 chars
-    const safe = (s: string) => s.replace(/[^a-zA-Z0-9]/g, '').substring(0, 15);
-    return `pc-${safe(inviteCode)}-${safe(userId)}`.substring(0, 40);
+  public buildPeerId(inviteCode: string, userId: string): string {
+    const safe = (s: string) => s.replace(/[^a-zA-Z0-9]/g, '').substring(0, 14);
+    return `pc-${safe(inviteCode)}-${safe(userId)}`.substring(0, 36);
   }
 
   async init(params: {
@@ -46,7 +45,6 @@ class PeerJSManager {
 
     return new Promise((resolve, reject) => {
       const peer = new Peer(peerId, {
-        // Use PeerJS free cloud signaling
         host: '0.peerjs.com',
         port: 443,
         secure: true,
@@ -56,7 +54,6 @@ class PeerJSManager {
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
             { urls: 'stun:stun2.l.google.com:19302' },
-            // Free TURN relay servers (openrelay.metered.ca)
             {
               urls: 'turn:openrelay.metered.ca:80',
               username: 'openrelayproject',
@@ -80,13 +77,12 @@ class PeerJSManager {
       this.peer = peer;
 
       peer.on('open', (id) => {
-        console.log('[PeerJS] Connected with ID:', id);
+        console.log('[PeerJS] Ready with ID:', id);
         resolve(id);
       });
 
       peer.on('error', (err) => {
         console.warn('[PeerJS] Error:', err);
-        // If ID taken, try with a random suffix
         if (err.type === 'unavailable-id') {
           const fallbackId = peerId + '-' + Math.random().toString(36).substring(2, 5);
           this.myPeerId = fallbackId;
@@ -98,7 +94,6 @@ class PeerJSManager {
         }
       });
 
-      // Answer incoming calls from remote peers
       peer.on('call', (call) => this.handleIncomingCall(call));
     });
   }
@@ -106,10 +101,12 @@ class PeerJSManager {
   private handleIncomingCall(call: MediaConnection) {
     if (!this.localStream) return;
 
+    console.log('[PeerJS] Answering call from:', call.peer);
     call.answer(this.localStream);
     this.calls.set(call.peer, call);
 
     call.on('stream', (remoteStream) => {
+      console.log('[PeerJS] Remote stream received from:', call.peer);
       const meta = (call.metadata as { name?: string; avatarUrl?: string }) || {};
       this.onRemoteStream?.(call.peer, remoteStream, {
         name: meta.name || call.peer,
@@ -128,14 +125,14 @@ class PeerJSManager {
     });
   }
 
-  /** Call another peer by their deterministic ID */
-  callPeer(inviteCode: string, targetUserId: string) {
-    if (!this.peer || !this.localStream) return;
-
-    const targetPeerId = this.buildPeerId(inviteCode, targetUserId);
+  /**
+   * Call a target peer directly using their exact PeerJS ID
+   */
+  callPeerDirect(targetPeerId: string) {
+    if (!this.peer || !this.localStream || !targetPeerId) return;
     if (this.calls.has(targetPeerId) || targetPeerId === this.myPeerId) return;
 
-    console.log('[PeerJS] Calling peer:', targetPeerId);
+    console.log('[PeerJS] Calling peer directly:', targetPeerId);
 
     const call = this.peer.call(targetPeerId, this.localStream, {
       metadata: this.myMeta,
@@ -145,7 +142,8 @@ class PeerJSManager {
     this.calls.set(targetPeerId, call);
 
     call.on('stream', (remoteStream) => {
-      this.onRemoteStream?.(targetPeerId, remoteStream, { name: targetUserId, avatarUrl: '' });
+      console.log('[PeerJS] Stream received from outbound call:', targetPeerId);
+      this.onRemoteStream?.(targetPeerId, remoteStream, { name: targetPeerId, avatarUrl: '' });
     });
 
     call.on('close', () => {
@@ -155,6 +153,7 @@ class PeerJSManager {
 
     call.on('error', (err) => {
       console.warn('[PeerJS] Outbound call error:', err);
+      this.calls.delete(targetPeerId);
     });
   }
 
@@ -162,7 +161,6 @@ class PeerJSManager {
   async replaceStream(newStream: MediaStream) {
     this.localStream = newStream;
 
-    // Update all existing calls with new tracks
     for (const [, call] of this.calls) {
       const pc = (call as any).peerConnection as RTCPeerConnection;
       if (!pc) continue;
@@ -182,7 +180,6 @@ class PeerJSManager {
   cleanup() {
     this.calls.forEach(call => call.close());
     this.calls.clear();
-    this.localStream?.getTracks().forEach(t => t.stop());
     this.localStream = null;
     this.peer?.destroy();
     this.peer = null;

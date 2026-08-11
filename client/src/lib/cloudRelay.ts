@@ -1,34 +1,39 @@
 /**
  * ProChat Cloud Realtime Relay
- * Pure TypeScript MQTT 3.1.1 over WebSockets client with proper variable-length encoding.
- * Enables real-time messaging, presence, and soundboard across all devices worldwide.
+ * Pure TypeScript MQTT 3.1.1 over WebSockets client with proper variable-length encoding,
+ * correct 2-byte packet IDs, multi-broker auto-failover, and automatic resubscription.
  */
 
 type MessageHandler = (topic: string, data: any) => void;
 
 /**
  * MQTT variable-length encoding (handles payloads > 127 bytes correctly).
- * Without this, any JSON message > 127 bytes gets silently dropped by the broker.
  */
 function encodeRemainingLength(len: number): number[] {
   const result: number[] = [];
   do {
     let byte = len % 128;
     len = Math.floor(len / 128);
-    if (len > 0) byte |= 0x80; // set continuation bit
+    if (len > 0) byte |= 0x80;
     result.push(byte);
   } while (len > 0);
   return result;
 }
 
+const BROKERS = [
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://broker.hivemq.com:8884/mqtt',
+];
+
 class CloudRealtimeRelay {
   private ws: WebSocket | null = null;
   private isConnected = false;
   private subscribers = new Map<string, Set<MessageHandler>>();
-  private clientId = 'prochat_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+  private clientId = 'pc_' + Math.random().toString(36).substring(2, 8) + '_' + Date.now().toString(36);
   private reconnectTimer: any = null;
   private pingInterval: any = null;
   private pendingQueue: Array<{ topic: string; data: any }> = [];
+  private brokerIndex = 0;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -42,8 +47,10 @@ class CloudRealtimeRelay {
     }
 
     try {
-      // Free public high-availability MQTT broker over secure WebSocket
-      this.ws = new WebSocket('wss://broker.emqx.io:8084/mqtt', 'mqttv3.1.1');
+      const brokerUrl = BROKERS[this.brokerIndex % BROKERS.length];
+      console.log('[CloudRelay] Connecting to broker:', brokerUrl);
+
+      this.ws = new WebSocket(brokerUrl, 'mqttv3.1.1');
       this.ws.binaryType = 'arraybuffer';
 
       this.ws.onopen = () => {
@@ -57,13 +64,16 @@ class CloudRealtimeRelay {
       this.ws.onclose = () => {
         this.isConnected = false;
         this.cleanupPing();
+        this.brokerIndex++; // Try next broker on failure
         this.scheduleReconnect();
       };
 
-      this.ws.onerror = () => {
+      this.ws.onerror = (err) => {
+        console.warn('[CloudRelay] WebSocket error, switching broker...');
         this.ws?.close();
       };
     } catch (e) {
+      this.brokerIndex++;
       this.scheduleReconnect();
     }
   }
@@ -73,9 +83,9 @@ class CloudRealtimeRelay {
 
     // MQTT 3.1.1 CONNECT packet
     const protocol = [0, 4, 77, 81, 84, 84]; // "MQTT"
-    const version = [4]; // protocol level 3.1.1
+    const version = [4]; // level 3.1.1
     const flags = [2]; // clean session
-    const keepAlive = [0, 60]; // 60 seconds
+    const keepAlive = [0, 60]; // 60s
 
     const clientIdBytes = new TextEncoder().encode(this.clientId);
     const clientIdLen = [Math.floor(clientIdBytes.length / 256), clientIdBytes.length % 256];
@@ -94,24 +104,27 @@ class CloudRealtimeRelay {
 
     const packetType = bytes[0] >> 4;
 
-    // CONNACK
+    // CONNACK (Packet Type 2)
     if (packetType === 2) {
       if (bytes[3] === 0) {
         this.isConnected = true;
+        console.log('[CloudRelay] Connected & Authenticated successfully!');
         this.startPing();
-        // Resubscribe to all previously subscribed topics
+
+        // Resubscribe to all active topics
         this.subscribers.forEach((_, topic) => {
           this.sendSubscribePacket(topic);
         });
-        // Flush pending publish queue
+
+        // Flush pending queue
         const queued = [...this.pendingQueue];
         this.pendingQueue = [];
-        queued.forEach(({ topic, data }) => this.publish(topic, data));
+        queued.forEach(({ topic, data: d }) => this.publish(topic, d));
       }
       return;
     }
 
-    // PUBLISH received
+    // PUBLISH (Packet Type 3)
     if (packetType === 3) {
       let offset = 1;
 
@@ -145,7 +158,7 @@ class CloudRealtimeRelay {
           handlers.forEach((h) => h(topic, parsed));
         }
       } catch (e) {
-        // Not JSON — ignore
+        // Not JSON
       }
     }
   }
@@ -155,7 +168,10 @@ class CloudRealtimeRelay {
 
     const topicBytes = new TextEncoder().encode(topic);
     const topicLen = [Math.floor(topicBytes.length / 256), topicBytes.length % 256];
-    const packetId = [0, Math.floor(Math.random() * 65535) + 1]; // random non-zero packet ID
+
+    // ✅ FIXED: Correct 2-byte MQTT packet identifier
+    const pid = Math.floor(Math.random() * 65534) + 1;
+    const packetId = [Math.floor(pid / 256), pid % 256];
     const qos = [0];
 
     const varHeader = [...packetId];
@@ -172,7 +188,7 @@ class CloudRealtimeRelay {
       if (this.ws && this.ws.readyState === WebSocket.OPEN && this.isConnected) {
         this.ws.send(new Uint8Array([0xC0, 0x00]).buffer); // PINGREQ
       }
-    }, 20000);
+    }, 15000);
   }
 
   private cleanupPing() {
@@ -187,7 +203,7 @@ class CloudRealtimeRelay {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
-    }, 3000);
+    }, 2000);
   }
 
   public subscribe(topic: string, handler: MessageHandler) {
@@ -213,7 +229,6 @@ class CloudRealtimeRelay {
 
   public publish(topic: string, data: any) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.isConnected) {
-      // Queue the message and reconnect
       this.pendingQueue.push({ topic, data });
       this.connect();
       return;
@@ -226,7 +241,6 @@ class CloudRealtimeRelay {
     const varHeader = [...topicLen, ...Array.from(topicBytes)];
     const payload = [...Array.from(payloadBytes)];
 
-    // ✅ FIXED: Proper MQTT variable-length encoding (handles payloads > 127 bytes)
     const remainLenBytes = encodeRemainingLength(varHeader.length + payload.length);
 
     const packet = new Uint8Array([0x30, ...remainLenBytes, ...varHeader, ...payload]);
