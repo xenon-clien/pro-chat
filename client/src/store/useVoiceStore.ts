@@ -234,16 +234,21 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         const incoming: VoicePeer = data.peer;
         if (!incoming?.id || incoming.id === myId) return;
 
-        set((state) => ({
-          peers: {
-            ...state.peers,
-            [incoming.id]: {
-              ...incoming,
-              isYou: false,
-              lastHeartbeat: Date.now(),
+        set((state) => {
+          const existing = state.peers[incoming.id];
+          return {
+            peers: {
+              ...state.peers,
+              [incoming.id]: {
+                ...incoming,
+                remoteStream: existing?.remoteStream,
+                isScreenSharing: incoming.isScreenSharing !== undefined ? incoming.isScreenSharing : existing?.isScreenSharing,
+                isYou: false,
+                lastHeartbeat: Date.now(),
+              },
             },
-          },
-        }));
+          };
+        });
 
         if (data.type === 'VOICE_JOIN' && incoming.peerId) {
           const myState = get().peers[myId];
@@ -259,13 +264,20 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         }
       } else if (data.type === 'VOICE_UPDATE') {
         const p: VoicePeer = data.peer;
-        if (p?.id && p.id !== myId && get().peers[p.id]) {
-          set((state) => ({
-            peers: {
-              ...state.peers,
-              [p.id]: { ...state.peers[p.id], ...p },
-            },
-          }));
+        if (p?.id && p.id !== myId) {
+          set((state) => {
+            const existing = state.peers[p.id];
+            return {
+              peers: {
+                ...state.peers,
+                [p.id]: {
+                  ...existing,
+                  ...p,
+                  remoteStream: existing?.remoteStream,
+                },
+              },
+            };
+          });
         }
       } else if (data.type === 'VOICE_LEAVE') {
         const leaveId = data.userId;

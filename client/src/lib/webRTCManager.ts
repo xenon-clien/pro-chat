@@ -138,7 +138,6 @@ class PeerJSManager {
 
     call.on('close', () => {
       this.calls.delete(call.peer);
-      this.onPeerLeave?.(call.peer);
     });
 
     call.on('error', (err) => {
@@ -169,7 +168,6 @@ class PeerJSManager {
 
       call.on('close', () => {
         this.calls.delete(targetPeerId);
-        this.onPeerLeave?.(targetPeerId);
       });
 
       call.on('error', (err) => {
