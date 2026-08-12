@@ -228,9 +228,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
               peer: { ...myState, peerId: peerJSManager.getMyPeerId() },
             });
           }
-          peerJSManager.callPeerDirect(incoming.peerId);
-        } else if (data.type === 'VOICE_HEARTBEAT' && incoming.peerId && !peers[incoming.id]?.remoteStream) {
-          peerJSManager.callPeerDirect(incoming.peerId);
+          if (!peerJSManager.hasActiveCall(incoming.peerId)) {
+            peerJSManager.callPeerDirect(incoming.peerId);
+          }
         }
       } else if (data.type === 'VOICE_UPDATE') {
         const p: VoicePeer = data.peer;

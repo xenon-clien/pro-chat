@@ -243,6 +243,10 @@ class PeerJSManager {
     });
   }
 
+  hasActiveCall(peerId: string): boolean {
+    return this.calls.has(peerId);
+  }
+
   getMyPeerId() { return this.myPeerId; }
 
   cleanup() {
