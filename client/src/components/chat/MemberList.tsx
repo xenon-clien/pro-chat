@@ -21,6 +21,7 @@ interface PresenceState {
   members: Record<string, PresenceMember>;
   upsertMember: (m: PresenceMember) => void;
   removeStaleMember: (id: string) => void;
+  clearMembers: () => void;
 }
 
 export const usePresenceStore = create<PresenceState>((set, get) => ({
@@ -31,23 +32,24 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
     delete next[id];
     set({ members: next });
   },
+  clearMembers: () => set({ members: {} }),
 }));
 
 interface MemberListProps {
   serverId: string;
 }
 
-const HEARTBEAT_INTERVAL = 4000; // every 4s for fast presence discovery
-const MEMBER_TIMEOUT = 18000;     // remove if silent for 18s
+const HEARTBEAT_INTERVAL = 3000; // every 3s for ultra-fast discovery
+const MEMBER_TIMEOUT = 16000;    // remove if silent for 16s
 
 export const MemberList: React.FC<MemberListProps> = () => {
   const { user: currentUser } = useAuthStore();
   const { peers } = useVoiceStore();
   const { servers, activeServerId } = useServerStore();
-  const { members, upsertMember, removeStaleMember } = usePresenceStore();
+  const { members, upsertMember, removeStaleMember, clearMembers } = usePresenceStore();
 
   const activeServer = servers.find(s => s.id === activeServerId) || servers[0];
-  const inviteCode = (activeServer?.inviteCode || 'PRO-HQ-8821').toUpperCase().replace(/[^A-Z0-9]/g, '-');
+  const inviteCode = (activeServer?.inviteCode || 'PRO-HD').toUpperCase().replace(/[^A-Z0-9]/g, '-');
   const presenceTopic = `prochat/v2/presence/${inviteCode}`;
 
   // ── Publish MY presence heartbeat ──
@@ -64,7 +66,7 @@ export const MemberList: React.FC<MemberListProps> = () => {
     // Announce immediately on load
     cloudRelay.publish(presenceTopic, me);
 
-    // Heartbeat every 4s
+    // Heartbeat every 3s
     const heartbeat = setInterval(() => {
       cloudRelay.publish(presenceTopic, { ...me, lastSeen: Date.now() });
     }, HEARTBEAT_INTERVAL);
@@ -75,6 +77,19 @@ export const MemberList: React.FC<MemberListProps> = () => {
   // ── Subscribe to others' presence ──
   useEffect(() => {
     if (!presenceTopic) return;
+
+    // Reset presence for new server
+    clearMembers();
+
+    // Initial broadcast
+    if (currentUser) {
+      cloudRelay.publish(presenceTopic, {
+        id: currentUser.id,
+        name: currentUser.name,
+        avatarUrl: currentUser.avatarUrl,
+        lastSeen: Date.now(),
+      });
+    }
 
     const unsub = cloudRelay.subscribe(presenceTopic, (_, data: PresenceMember) => {
       if (data?.id && data.id !== currentUser?.id) {
@@ -91,7 +106,7 @@ export const MemberList: React.FC<MemberListProps> = () => {
       }
     });
 
-    // Cleanup stale members every 8s
+    // Cleanup stale members
     const staleCheck = setInterval(() => {
       const now = Date.now();
       Object.values(usePresenceStore.getState().members).forEach(m => {
@@ -99,13 +114,13 @@ export const MemberList: React.FC<MemberListProps> = () => {
           removeStaleMember(m.id);
         }
       });
-    }, 8000);
+    }, 4000);
 
     return () => {
       unsub();
       clearInterval(staleCheck);
     };
-  }, [presenceTopic, currentUser?.id, currentUser?.name, currentUser?.avatarUrl, upsertMember, removeStaleMember]);
+  }, [presenceTopic, currentUser?.id, currentUser?.name, currentUser?.avatarUrl, upsertMember, removeStaleMember, clearMembers]);
 
   // ── Build final member list ──
   const voicePeersList = Object.values(peers);
@@ -168,34 +183,33 @@ export const MemberList: React.FC<MemberListProps> = () => {
                   member.isBot ? "border-2 border-cyan-400 shadow-cyan-500/20" : "border border-white/10"
                 )}
               />
-              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#080A0F]" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-[#080A0F]" />
             </div>
 
-            {/* Name + Badges */}
-            <div className="truncate flex-1 min-w-0">
-              <div className="flex items-center space-x-1.5 truncate">
-                <span className={clsx(
-                  "font-extrabold text-xs truncate transition-colors",
-                  member.isBot ? "text-cyan-300" : "text-gray-200 group-hover:text-white"
-                )}>
+            {/* Member Details */}
+            <div className="flex flex-col min-w-0 flex-1">
+              <div className="flex items-center space-x-1.5">
+                <span className="text-xs font-bold text-gray-200 group-hover:text-white truncate">
                   {member.name}
                 </span>
 
-                {member.isBot && (
-                  <span className="bg-gradient-to-r from-blue-500 to-cyan-400 text-black text-[9px] font-black px-1.5 py-0.2 rounded uppercase tracking-wider">
-                    BOT
-                  </span>
-                )}
-
                 {member.isYou && (
-                  <span className="text-[9px] bg-pink-500/20 text-pink-400 font-bold px-1.5 py-0.2 rounded uppercase">
+                  <span className="text-[9px] font-black text-pink-400 bg-pink-500/10 px-1 py-0.2 rounded uppercase">
                     YOU
                   </span>
                 )}
+
+                {member.isBot && (
+                  <span className="bg-gradient-to-r from-blue-500 to-cyan-400 text-black text-[9px] font-black px-1.5 py-0.2 rounded-md uppercase tracking-wider shadow-sm flex items-center gap-0.5">
+                    <Bot size={10} />
+                    <span>BOT</span>
+                  </span>
+                )}
               </div>
-              <div className="text-[10px] text-gray-500 truncate">
-                {member.isBot ? 'ProChat Assistant' : member.isYou ? 'Online' : 'Active Member'}
-              </div>
+
+              <span className="text-[10px] text-gray-500 group-hover:text-gray-400 truncate">
+                {member.isBot ? 'ProChat Assistant' : 'Online'}
+              </span>
             </div>
           </div>
         ))}

@@ -1,7 +1,7 @@
 /**
- * ProChat Robust Real-Time Cloud Relay
- * Complete MQTT 3.1.1 WebSocket client with multi-packet frame parser,
- * case-insensitive topic routing, keep-alive heartbeat, and instant resubscription.
+ * ProChat Dual Real-Time Cloud Relay
+ * Combines MQTT WebSocket relay (for cross-device / cross-network peers)
+ * + HTML5 BroadcastChannel (for 0ms instant cross-tab sync on same machine/browser).
  */
 
 type MessageHandler = (topic: string, data: any) => void;
@@ -25,10 +25,28 @@ class CloudRealtimeRelay {
   private reconnectTimer: any = null;
   private pingInterval: any = null;
   private pendingQueue: Array<{ topic: string; data: any }> = [];
+  private broadcastChannel: BroadcastChannel | null = null;
 
   constructor() {
     if (typeof window !== 'undefined') {
+      this.initBroadcastChannel();
       this.connect();
+    }
+  }
+
+  private initBroadcastChannel() {
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        this.broadcastChannel = new BroadcastChannel('prochat_local_realtime_mesh');
+        this.broadcastChannel.onmessage = (event) => {
+          const { topic, data, senderId } = event.data || {};
+          if (topic && data && senderId !== this.clientId) {
+            this.dispatchMessage(topic, data);
+          }
+        };
+      }
+    } catch (e) {
+      console.warn('[CloudRelay] BroadcastChannel not supported:', e);
     }
   }
 
@@ -69,7 +87,7 @@ class CloudRealtimeRelay {
     const protocol = [0, 4, 77, 81, 84, 84]; // "MQTT"
     const version = [4]; // level 3.1.1
     const flags = [2]; // clean session
-    const keepAlive = [0, 45]; // 45s
+    const keepAlive = [0, 30]; // 30s
 
     const clientIdBytes = new TextEncoder().encode(this.clientId);
     const clientIdLen = [Math.floor(clientIdBytes.length / 256), clientIdBytes.length % 256];
@@ -82,9 +100,6 @@ class CloudRealtimeRelay {
     this.ws.send(packet.buffer);
   }
 
-  /**
-   * Handle incoming WebSocket frames, parsing all sequential MQTT packets in the buffer
-   */
   private handleRawFrame(data: ArrayBuffer) {
     const bytes = new Uint8Array(data);
     let cursor = 0;
@@ -93,7 +108,6 @@ class CloudRealtimeRelay {
       const headerByte = bytes[cursor++];
       const packetType = headerByte >> 4;
 
-      // Decode remaining length
       let remainLen = 0;
       let multiplier = 1;
       let digit: number;
@@ -107,23 +121,20 @@ class CloudRealtimeRelay {
       const packetEnd = cursor + remainLen;
       if (packetEnd > bytes.length) break;
 
-      // ─── CONNACK (Packet Type 2) ───────────────────────────
+      // CONNACK (Type 2)
       if (packetType === 2) {
         this.isConnected = true;
         this.startPing();
 
-        // Resubscribe to all active topics
         this.subscribers.forEach((_, topic) => {
           this.sendSubscribePacket(topic);
         });
 
-        // Flush queued messages
         const queued = [...this.pendingQueue];
         this.pendingQueue = [];
         queued.forEach(({ topic, data: d }) => this.publish(topic, d));
       }
-
-      // ─── PUBLISH (Packet Type 3) ───────────────────────────
+      // PUBLISH (Type 3)
       else if (packetType === 3) {
         let pOffset = cursor;
         if (pOffset + 2 <= packetEnd) {
@@ -141,9 +152,7 @@ class CloudRealtimeRelay {
             try {
               const parsed = JSON.parse(payloadStr);
               this.dispatchMessage(rawTopic, parsed);
-            } catch (e) {
-              // Not JSON
-            }
+            } catch (e) {}
           }
         }
       }
@@ -191,7 +200,7 @@ class CloudRealtimeRelay {
     this.cleanupPing();
     this.pingInterval = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN && this.isConnected) {
-        this.ws.send(new Uint8Array([0xc0, 0x00]).buffer); // PINGREQ
+        this.ws.send(new Uint8Array([0xc0, 0x00]).buffer);
       }
     }, 15000);
   }
@@ -234,6 +243,18 @@ class CloudRealtimeRelay {
   }
 
   public publish(topic: string, data: any) {
+    // 1. Broadcast locally across tabs with 0ms delay
+    if (this.broadcastChannel) {
+      try {
+        this.broadcastChannel.postMessage({
+          topic,
+          data,
+          senderId: this.clientId,
+        });
+      } catch (e) {}
+    }
+
+    // 2. Publish to cloud WebSocket relay for remote devices
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.isConnected) {
       this.pendingQueue.push({ topic, data });
       this.connect();
