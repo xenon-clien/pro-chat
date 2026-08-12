@@ -47,7 +47,7 @@ export const OFFICIAL_PROCHAT_SERVER: Server = {
   id: 'pro-chat-hq',
   name: 'Pro Chat HQ',
   iconUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=ProChat',
-  inviteCode: 'PRO-HQ',
+  inviteCode: 'PRO-HD',
   channels: [
     { id: 'ch-general', name: 'general', type: 'TEXT', serverId: 'pro-chat-hq' },
     { id: 'ch-ai-bot', name: '🤖-sam-ai-assistant', type: 'TEXT', serverId: 'pro-chat-hq' },
@@ -56,34 +56,55 @@ export const OFFICIAL_PROCHAT_SERVER: Server = {
   ]
 };
 
-const DEFAULT_SERVERS: Server[] = [OFFICIAL_PROCHAT_SERVER];
+const INITIAL_PUBLIC_SERVERS: Server[] = [
+  OFFICIAL_PROCHAT_SERVER,
+  {
+    id: 'srv-gaming-hub',
+    name: 'Gaming Hub Guild',
+    iconUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=GamingHub',
+    inviteCode: 'GAME-7799',
+    channels: [
+      { id: 'ch-gen-game', name: 'general', type: 'TEXT', serverId: 'srv-gaming-hub' },
+      { id: 'ch-ai-game', name: '🤖-gaming-bot', type: 'TEXT', serverId: 'srv-gaming-hub' },
+      { id: 'ch-voice-game', name: 'Squad Voice', type: 'VOICE', serverId: 'srv-gaming-hub' },
+    ]
+  },
+  {
+    id: 'srv-anime-realm',
+    name: 'Anime & Manga Lounge',
+    iconUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=AnimeRealm',
+    inviteCode: 'ANIME-101',
+    channels: [
+      { id: 'ch-gen-anime', name: 'general', type: 'TEXT', serverId: 'srv-anime-realm' },
+      { id: 'ch-ai-anime', name: '🤖-sam-assistant', type: 'TEXT', serverId: 'srv-anime-realm' },
+      { id: 'ch-voice-anime', name: 'Watch Party', type: 'VOICE', serverId: 'srv-anime-realm' },
+    ]
+  }
+];
 
 function getCleanServers(): Server[] {
   try {
     const stored = localStorage.getItem('prochat_user_servers');
     if (!stored) {
-      localStorage.setItem('prochat_user_servers', JSON.stringify(DEFAULT_SERVERS));
-      return DEFAULT_SERVERS;
+      localStorage.setItem('prochat_user_servers', JSON.stringify([OFFICIAL_PROCHAT_SERVER]));
+      return [OFFICIAL_PROCHAT_SERVER];
     }
     const parsed: Server[] = JSON.parse(stored);
     if (!Array.isArray(parsed) || parsed.length === 0) {
-      localStorage.setItem('prochat_user_servers', JSON.stringify(DEFAULT_SERVERS));
-      return DEFAULT_SERVERS;
+      localStorage.setItem('prochat_user_servers', JSON.stringify([OFFICIAL_PROCHAT_SERVER]));
+      return [OFFICIAL_PROCHAT_SERVER];
     }
 
     const seen = new Set<string>();
     const cleanList: Server[] = [];
 
-    // Ensure official Pro Chat HQ is always first
+    // Ensure official Pro Chat HQ is included
     cleanList.push(OFFICIAL_PROCHAT_SERVER);
     seen.add(OFFICIAL_PROCHAT_SERVER.id);
-    seen.add('pro-chat-hq');
 
     for (const s of parsed) {
       if (!s || !s.id) continue;
       const key = s.id.toLowerCase();
-      // Skip duplicate/old clutter
-      if (key === 'gaming-zone' || key === 'anime-lounge' || key.startsWith('joined-pro-')) continue;
       if (!seen.has(key)) {
         seen.add(key);
         if (!s.channels || s.channels.length === 0) {
@@ -96,10 +117,9 @@ function getCleanServers(): Server[] {
       }
     }
 
-    localStorage.setItem('prochat_user_servers', JSON.stringify(cleanList));
     return cleanList;
   } catch {
-    return DEFAULT_SERVERS;
+    return [OFFICIAL_PROCHAT_SERVER];
   }
 }
 
@@ -110,12 +130,25 @@ export const useServerStore = create<ServerState>((set, get) => {
   registerServerCodeGetter(() => {
     const { servers, activeServerId } = get();
     const server = servers.find(s => s.id === activeServerId);
-    return server?.inviteCode || 'PRO-HQ';
+    return server?.inviteCode || 'PRO-HD';
   });
+
+  // Listen for global public server announcements over cloud relay
+  if (typeof window !== 'undefined') {
+    cloudRelay.subscribe('prochat/v1/servers/directory', (_, data) => {
+      if (data && data.server) {
+        const incoming: Server = data.server;
+        const cur = get().publicDirectory;
+        if (!cur.find(s => s.id === incoming.id || s.inviteCode?.toUpperCase() === incoming.inviteCode?.toUpperCase())) {
+          set({ publicDirectory: [incoming, ...cur] });
+        }
+      }
+    });
+  }
 
   return {
     servers: savedServers,
-    publicDirectory: DEFAULT_SERVERS,
+    publicDirectory: INITIAL_PUBLIC_SERVERS,
     activeServerId: savedServers[0]?.id || 'pro-chat-hq',
     activeChannelId: savedServers[0]?.channels[0]?.id || 'ch-general',
     isLoading: false,
@@ -123,11 +156,17 @@ export const useServerStore = create<ServerState>((set, get) => {
 
     fetchServers: async () => {
       const clean = getCleanServers();
+      const currentActiveId = get().activeServerId;
+      const targetActive = clean.find(s => s.id === currentActiveId) ? currentActiveId : clean[0].id;
+      const activeObj = clean.find(s => s.id === targetActive) || clean[0];
+      const currentChId = get().activeChannelId;
+      const targetCh = activeObj.channels.find(c => c.id === currentChId) ? currentChId : activeObj.channels[0]?.id || 'ch-general';
+
       set({ 
         servers: clean, 
         isLoading: false,
-        activeServerId: clean[0].id,
-        activeChannelId: clean[0].channels[0]?.id || 'ch-general',
+        activeServerId: targetActive,
+        activeChannelId: targetCh,
       });
     },
 
@@ -166,7 +205,8 @@ export const useServerStore = create<ServerState>((set, get) => {
       set({
         servers: updated,
         activeServerId: newServer.id,
-        activeChannelId: newServer.channels[0].id
+        activeChannelId: newServer.channels[0].id,
+        publicDirectory: [newServer, ...get().publicDirectory]
       });
 
       try {
@@ -198,15 +238,14 @@ export const useServerStore = create<ServerState>((set, get) => {
       const cleanCode = code.trim().toUpperCase().replace(/[\s_]+/g, '-').replace(/^JOIN-/, '');
       const state = get();
 
-      // Normalize all aliases for the main server: PRO-HQ, PRO-HD, PROHD, PROHQ, PRO-HQ-8821, PRO-HD-8821
+      // Normalize all aliases for the main server: PRO-HD, PRO-HQ, PROHD, PROHQ
       const isOfficialAlias = 
-        cleanCode === 'PRO-HQ' || 
         cleanCode === 'PRO-HD' || 
+        cleanCode === 'PRO-HQ' || 
         cleanCode === 'PROHD' || 
         cleanCode === 'PROHQ' || 
-        cleanCode === 'PRO-HQ-8821' || 
-        cleanCode === 'PRO-HD-8821' ||
-        cleanCode.startsWith('PRO-H') ||
+        cleanCode === 'PRO-HD-8821' || 
+        cleanCode === 'PRO-HQ-8821' ||
         cleanCode === 'PROCHAT' ||
         cleanCode === 'PRO CHAT HQ';
 
@@ -217,6 +256,13 @@ export const useServerStore = create<ServerState>((set, get) => {
         });
         return OFFICIAL_PROCHAT_SERVER;
       }
+
+      // Check in public directory first to get canonical name & icon
+      const inDirectory = state.publicDirectory.find(
+        s => s.inviteCode?.toUpperCase() === cleanCode || 
+             s.name.toUpperCase() === cleanCode ||
+             s.id.toUpperCase() === cleanCode
+      );
 
       // Check existing user servers
       const existingInUser = state.servers.find(
@@ -233,7 +279,7 @@ export const useServerStore = create<ServerState>((set, get) => {
       }
 
       // Join new server
-      const serverToJoin: Server = {
+      const serverToJoin: Server = inDirectory || {
         id: 'srv-' + cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '-'),
         name: cleanCode.includes('-') ? `Squad ${cleanCode}` : cleanCode,
         iconUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(cleanCode)}`,
@@ -247,6 +293,9 @@ export const useServerStore = create<ServerState>((set, get) => {
 
       const updated = [...state.servers.filter(s => s.id !== serverToJoin.id), serverToJoin];
       localStorage.setItem('prochat_user_servers', JSON.stringify(updated));
+
+      // Broadcast so everyone's public directory has it
+      cloudRelay.publish('prochat/v1/servers/directory', { server: serverToJoin });
 
       set({
         servers: updated,
