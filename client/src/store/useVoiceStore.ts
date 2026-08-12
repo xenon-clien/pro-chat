@@ -88,6 +88,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+          sampleRate: 48000,
+          channelCount: 1,
         },
         video: false,
       });
@@ -343,8 +345,20 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
       set({ localScreenStream: screenStream });
 
-      // Transmit screen video over WebRTC
-      await peerJSManager.replaceStream(screenStream);
+      // Combine Screen Video track + Mic Audio track into a combined broadcast stream
+      const combinedTracks: MediaStreamTrack[] = [
+        ...screenStream.getVideoTracks(),
+      ];
+
+      // Add mic audio track if available so user's voice is transmitted during screen share
+      if (_micStream && _micStream.getAudioTracks().length > 0) {
+        combinedTracks.push(_micStream.getAudioTracks()[0]);
+      } else if (screenStream.getAudioTracks().length > 0) {
+        combinedTracks.push(screenStream.getAudioTracks()[0]);
+      }
+
+      const broadcastStream = new MediaStream(combinedTracks);
+      await peerJSManager.replaceStream(broadcastStream);
 
       const { peers } = get();
       const myEntry = Object.entries(peers).find(([, p]) => p.isYou);

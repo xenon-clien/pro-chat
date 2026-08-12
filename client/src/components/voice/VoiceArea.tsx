@@ -540,7 +540,9 @@ const RemoteAudio: React.FC<{ stream?: MediaStream }> = ({ stream }) => {
   useEffect(() => {
     if (!stream || !audioRef.current) return;
     const el = audioRef.current;
-    el.srcObject = stream;
+    if (el.srcObject !== stream) {
+      el.srcObject = stream;
+    }
     el.volume = 1.0;
     el.play().catch(() => {});
 
