@@ -505,27 +505,19 @@ export const VoiceArea: React.FC = () => {
               <ScreenShare size={16} />
               <span>Stop</span>
             </button>
+          ) : typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getDisplayMedia !== 'function' ? (
+            /* ── Mobile: Screen Share Not Supported ── */
+            <div className="flex items-center space-x-1.5 h-10 px-3 rounded-2xl bg-[#1A1F2E] border border-white/10 text-gray-500 text-[10px] font-bold">
+              <ScreenShare size={14} className="opacity-40" />
+              <span className="hidden xs:inline">PC only</span>
+            </div>
           ) : (
             <button
-              onClick={() => {
-                // On mobile: getDisplayMedia not supported — skip modal, use camera directly
-                const isMobileDevice = !navigator.mediaDevices.getDisplayMedia;
-                if (isMobileDevice) {
-                  handleStartStream({ resolution: '720p', fps: '24', shareAudio: false });
-                } else {
-                  setIsScreenModalOpen(true);
-                }
-              }}
+              onClick={() => setIsScreenModalOpen(true)}
               className="h-10 md:h-12 px-3 md:px-6 rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-500 to-pink-500 hover:from-blue-500 hover:via-cyan-400 hover:to-pink-400 text-white font-black text-[11px] md:text-xs tracking-wide shadow-xl shadow-cyan-500/25 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center space-x-1.5 md:space-x-2"
             >
               <ScreenShare size={16} />
-              <span className="hidden xs:inline">
-                {typeof navigator !== 'undefined' && !navigator.mediaDevices?.getDisplayMedia
-                  ? 'Camera Share'
-                  : 'Share Screen'
-                }
-              </span>
-              <span className="xs:hidden">Share</span>
+              <span>Share Screen</span>
             </button>
           )}
         </div>
