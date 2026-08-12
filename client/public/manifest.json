@@ -1,0 +1,26 @@
+{
+  "name": "ProChat • Next-Gen Voice & Screen Share",
+  "short_name": "ProChat",
+  "description": "Ultra HD voice, 60fps screen sharing, and AI assistant team chat app.",
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "background_color": "#080A0F",
+  "theme_color": "#06B6D4",
+  "orientation": "any",
+  "categories": ["social", "communication", "productivity"],
+  "icons": [
+    {
+      "src": "https://api.dicebear.com/7.x/bottts/svg?seed=ProChat&backgroundColor=38bdf8",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

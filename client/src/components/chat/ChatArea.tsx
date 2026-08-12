@@ -457,7 +457,9 @@ export const ChatArea: React.FC = () => {
 
       {/* ──────── RIGHT MEMBER LIST DRAWER (CORRECTLY POSITIONED ON RIGHT SIDE) ──────── */}
       {isMemberListOpen && (
-        <MemberList serverId={activeServer.id} />
+        <div className="hidden lg:block h-full shrink-0">
+          <MemberList serverId={activeServer.id} />
+        </div>
       )}
 
       {/* Modals */}

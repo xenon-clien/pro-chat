@@ -7,16 +7,19 @@ import { MemberList } from '../components/chat/MemberList';
 import { FriendsView } from '../components/home/FriendsView';
 import DiscordTitleBar from '../components/ui/DiscordTitleBar';
 import { useServerStore } from '../store/useServerStore';
-import { Sparkles, CheckCircle2 } from 'lucide-react';
+import { Sparkles, CheckCircle2, X } from 'lucide-react';
+import clsx from 'clsx';
 
 export const MainLayout: React.FC = () => {
   const { fetchServers, isLoading, servers, activeServerId, activeChannelId, joinServerByCode } = useServerStore();
   const [joinedToast, setJoinedToast] = useState<string | null>(null);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [isMobileMemberListOpen, setIsMobileMemberListOpen] = useState(false);
 
   useEffect(() => {
     fetchServers();
 
-    // Auto-detect invite code from URL query params (e.g. ?join=GAME-7799 or ?invite=GAME-7799)
+    // Auto-detect invite code from URL query params (e.g. ?join=PRO-HD or ?invite=PRO-HD)
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const inviteCode = params.get('join') || params.get('invite');
@@ -38,6 +41,11 @@ export const MainLayout: React.FC = () => {
     }
   }, [fetchServers, joinServerByCode]);
 
+  // Close mobile drawers when switching channels
+  useEffect(() => {
+    setIsMobileDrawerOpen(false);
+  }, [activeChannelId, activeServerId]);
+
   const isHome = activeServerId === 'home';
   const activeServer = isHome ? null : servers.find(s => s.id === activeServerId) || servers[0];
   const activeChannel = activeServer?.channels?.find(c => c.id === activeChannelId);
@@ -53,8 +61,12 @@ export const MainLayout: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden bg-[#080A0F] select-none relative">
-      {/* Discord Top Window Title Bar */}
-      <DiscordTitleBar notificationCount="9+" />
+      {/* Discord Top Window Title Bar with Mobile Drawer Controls */}
+      <DiscordTitleBar 
+        notificationCount="9+" 
+        onToggleMobileMenu={() => setIsMobileDrawerOpen(prev => !prev)}
+        onToggleMemberList={() => setIsMobileMemberListOpen(prev => !prev)}
+      />
 
       {/* Auto-Join Toast Notification */}
       {joinedToast && (
@@ -65,18 +77,70 @@ export const MainLayout: React.FC = () => {
       )}
 
       {/* Main Workspace Layout */}
-      <div className="flex flex-1 w-full overflow-hidden bg-[#0B0E14]">
-        <ServerSidebar />
-        <ChannelSidebar />
-        {isHome ? (
-          <FriendsView />
-        ) : activeChannel?.type === 'VOICE' ? (
-          <div className="flex flex-1 h-full min-w-0 overflow-hidden">
-            <VoiceArea />
-            <MemberList serverId={activeServer?.id || 'pro-chat-hq'} />
-          </div>
-        ) : (
-          <ChatArea />
+      <div className="flex flex-1 w-full overflow-hidden bg-[#0B0E14] relative">
+        
+        {/* ─── Mobile Left Drawer Backdrop ─── */}
+        {isMobileDrawerOpen && (
+          <div 
+            className="md:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity"
+            onClick={() => setIsMobileDrawerOpen(false)}
+          />
+        )}
+
+        {/* ─── Desktop & Mobile Left Sidebar Container ─── */}
+        <div className={clsx(
+          "flex h-full shrink-0 z-50 transition-transform duration-300 ease-in-out md:translate-x-0 md:static fixed top-9 md:top-0 bottom-0 left-0",
+          isMobileDrawerOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0"
+        )}>
+          <ServerSidebar />
+          <ChannelSidebar />
+        </div>
+
+        {/* ─── Center: Main Content (Friends / Voice / Chat) ─── */}
+        <div className="flex-1 flex h-full min-w-0 overflow-hidden relative">
+          {isHome ? (
+            <FriendsView />
+          ) : activeChannel?.type === 'VOICE' ? (
+            <div className="flex flex-1 h-full min-w-0 overflow-hidden relative">
+              <VoiceArea />
+              {/* Desktop MemberList */}
+              <div className="hidden md:block h-full">
+                <MemberList serverId={activeServer?.id || 'pro-chat-hq'} />
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-1 h-full min-w-0 overflow-hidden relative">
+              <ChatArea />
+              {/* Desktop MemberList */}
+              <div className="hidden md:block h-full">
+                <MemberList serverId={activeServer?.id || 'pro-chat-hq'} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ─── Mobile Right MemberList Drawer ─── */}
+        {isMobileMemberListOpen && (
+          <>
+            <div 
+              className="md:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-sm"
+              onClick={() => setIsMobileMemberListOpen(false)}
+            />
+            <div className="md:hidden fixed top-9 bottom-0 right-0 z-50 w-72 bg-[#080A0F] shadow-2xl animate-scale-up border-l border-white/10 flex flex-col">
+              <div className="h-10 px-4 border-b border-white/10 flex items-center justify-between text-xs font-bold text-gray-300">
+                <span>Server Members</span>
+                <button 
+                  onClick={() => setIsMobileMemberListOpen(false)}
+                  className="p-1 rounded-lg hover:bg-white/10 text-gray-400"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <MemberList serverId={activeServer?.id || 'pro-chat-hq'} />
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>

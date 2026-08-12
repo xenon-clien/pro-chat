@@ -435,21 +435,21 @@ export const VoiceArea: React.FC = () => {
       )}
 
       {/* ──────── BOTTOM VOICE CONTROL TOOLBAR ──────── */}
-      <div className="h-20 bg-[#090B10] border-t border-[#181D2A] px-6 flex items-center justify-between shrink-0">
+      <div className="min-h-16 py-2 bg-[#090B10] border-t border-[#181D2A] px-3 md:px-6 flex items-center justify-center sm:justify-between flex-wrap gap-2 shrink-0">
         {/* Left: Device Controls (Mute, Deafen) */}
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2">
           {/* Mic Mute / Unmute */}
           <button
             onClick={toggleMute}
             className={clsx(
-              "h-12 px-4 rounded-2xl flex items-center space-x-2 font-bold text-xs transition-all shadow-md cursor-pointer",
+              "h-10 md:h-12 px-3 md:px-4 rounded-2xl flex items-center space-x-1.5 md:space-x-2 font-bold text-[11px] md:text-xs transition-all shadow-md cursor-pointer",
               isMuted
                 ? "bg-[#1A1F2E] text-rose-400 hover:bg-[#23293D] border border-rose-500/30"
                 : "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-cyan-500/20"
             )}
             title={isMuted ? "Unmute Microphone" : "Mute Microphone"}
           >
-            {isMuted ? <MicOff size={18} /> : <Mic size={18} />}
+            {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
             <span>{isMuted ? 'Unmute' : 'Mute'}</span>
           </button>
 
@@ -457,60 +457,60 @@ export const VoiceArea: React.FC = () => {
           <button
             onClick={() => setIsDeafened(!isDeafened)}
             className={clsx(
-              "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-md cursor-pointer",
+              "w-10 h-10 md:w-12 md:h-12 rounded-2xl flex items-center justify-center transition-all shadow-md cursor-pointer",
               isDeafened
                 ? "bg-rose-600/20 border border-rose-500 text-rose-400"
                 : "bg-[#141824] hover:bg-[#1C2234] border border-white/5 text-gray-300"
             )}
             title={isDeafened ? "Undeafen" : "Deafen"}
           >
-            {isDeafened ? <VolumeX size={18} /> : <Headphones size={18} />}
+            {isDeafened ? <VolumeX size={16} /> : <Headphones size={16} />}
           </button>
         </div>
 
         {/* Center: Stage Actions (Soundboard, Disconnect) */}
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2">
           {/* Soundboard Button */}
           <button
             onClick={() => setIsSoundboardOpen(!isSoundboardOpen)}
             className={clsx(
-              "h-12 px-5 rounded-2xl font-black text-xs flex items-center space-x-2 transition-all shadow-lg cursor-pointer",
+              "h-10 md:h-12 px-3 md:px-5 rounded-2xl font-black text-[11px] md:text-xs flex items-center space-x-1.5 md:space-x-2 transition-all shadow-lg cursor-pointer",
               isSoundboardOpen
                 ? "bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-pink-500/25"
                 : "bg-[#141824] hover:bg-[#1C2234] border border-white/10 text-gray-300"
             )}
           >
-            <Radio size={16} className="animate-pulse" />
-            <span>Soundboard</span>
+            <Radio size={15} className="animate-pulse" />
+            <span className="hidden xs:inline">Soundboard</span>
           </button>
 
           {/* 🔴 Clean Solid Red Disconnect Button */}
           <button
             onClick={handleDisconnect}
-            className="h-12 px-5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-black text-xs rounded-2xl flex items-center space-x-2 transition-all shadow-lg shadow-rose-600/30 cursor-pointer"
+            className="h-10 md:h-12 px-4 md:px-5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-black text-[11px] md:text-xs rounded-2xl flex items-center space-x-1.5 md:space-x-2 transition-all shadow-lg shadow-rose-600/30 cursor-pointer"
             title="Disconnect / Leave Call"
           >
-            <Phone size={16} className="rotate-[135deg] fill-white" />
+            <Phone size={15} className="rotate-[135deg] fill-white" />
             <span>Leave</span>
           </button>
         </div>
 
         {/* Right: Share Screen Button */}
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2">
           {isLocalScreenSharing ? (
             <button
               onClick={handleStopStream}
-              className="h-12 px-6 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs shadow-xl shadow-rose-600/30 transition-all cursor-pointer flex items-center space-x-2"
+              className="h-10 md:h-12 px-4 md:px-6 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-black text-[11px] md:text-xs shadow-xl shadow-rose-600/30 transition-all cursor-pointer flex items-center space-x-1.5 md:space-x-2"
             >
-              <ScreenShare size={18} />
+              <ScreenShare size={16} />
               <span>Stop Sharing</span>
             </button>
           ) : (
             <button
               onClick={() => setIsScreenModalOpen(true)}
-              className="h-12 px-6 rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-500 to-pink-500 hover:from-blue-500 hover:via-cyan-400 hover:to-pink-400 text-white font-black text-xs tracking-wide shadow-xl shadow-cyan-500/25 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center space-x-2.5"
+              className="h-10 md:h-12 px-4 md:px-6 rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-500 to-pink-500 hover:from-blue-500 hover:via-cyan-400 hover:to-pink-400 text-white font-black text-[11px] md:text-xs tracking-wide shadow-xl shadow-cyan-500/25 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center space-x-1.5 md:space-x-2"
             >
-              <ScreenShare size={18} />
+              <ScreenShare size={16} />
               <span>Share Screen</span>
             </button>
           )}
