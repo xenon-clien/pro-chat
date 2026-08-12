@@ -103,37 +103,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     }
     _micStream = micStream;
 
-    // ─── 2. Voice Activity Detection (Speaking Radar Glow) ───────
-    try {
-      if (micStream.getAudioTracks().length > 0) {
-        _audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const src = _audioCtx.createMediaStreamSource(micStream);
-        const analyser = _audioCtx.createAnalyser();
-        analyser.fftSize = 256;
-        src.connect(analyser);
-
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        let wasSpeaking = false;
-
-        const checkSpeaking = () => {
-          if (!_micStream) return;
-          analyser.getByteFrequencyData(dataArray);
-          let sum = 0;
-          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-          const avg = sum / dataArray.length;
-          const isNowSpeaking = avg > 15;
-
-          if (isNowSpeaking !== wasSpeaking) {
-            wasSpeaking = isNowSpeaking;
-            get().updateLocalState({ isSpeaking: isNowSpeaking });
-          }
-          _micAnimFrame = requestAnimationFrame(checkSpeaking);
-        };
-        _micAnimFrame = requestAnimationFrame(checkSpeaking);
-      }
-    } catch (e) {}
-
-    // ─── 3. Init PeerJS with STUN/TURN & P2P WebRTC ─────────────
+    // ─── 2. Init PeerJS with STUN/TURN & P2P WebRTC ─────────────
     try {
       const myPeerId = await peerJSManager.init({
         inviteCode: serverInviteCode || 'PRO-HD',

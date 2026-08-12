@@ -541,42 +541,19 @@ const RemoteAudio: React.FC<{ stream?: MediaStream }> = ({ stream }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    if (!stream) return;
+    if (!stream || !audioRef.current) return;
+    const el = audioRef.current;
+    el.srcObject = stream;
+    el.volume = 1.0;
+    el.play().catch(() => {});
 
-    // 1. Play via HTML5 Audio element
-    if (audioRef.current) {
-      audioRef.current.srcObject = stream;
-      audioRef.current.volume = 1.0;
-      audioRef.current.play().catch(() => {});
-    }
-
-    // 2. Play via Web Audio API AudioContext for reliable playback across browsers
-    let audioCtx: AudioContext | null = null;
-    try {
-      audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume().catch(() => {});
-      }
-      const source = audioCtx.createMediaStreamSource(stream);
-      source.connect(audioCtx.destination);
-    } catch (e) {}
-
-    const resumeAudio = () => {
-      if (audioCtx && audioCtx.state === 'suspended') {
-        audioCtx.resume().catch(() => {});
-      }
-      if (audioRef.current) {
-        audioRef.current.play().catch(() => {});
-      }
+    const tryPlay = () => {
+      el.play().catch(() => {});
     };
 
-    window.addEventListener('click', resumeAudio);
-    window.addEventListener('keydown', resumeAudio);
-
+    window.addEventListener('click', tryPlay, { once: true });
     return () => {
-      window.removeEventListener('click', resumeAudio);
-      window.removeEventListener('keydown', resumeAudio);
-      try { audioCtx?.close(); } catch (e) {}
+      window.removeEventListener('click', tryPlay);
     };
   }, [stream]);
 
