@@ -345,6 +345,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
     const [myId, myPeer] = myEntry;
     const updated: VoicePeer = { ...myPeer, ...updates, lastHeartbeat: Date.now() };
+
+    // Toggle actual hardware mic track
+    if (updates.isMuted !== undefined && _micStream) {
+      _micStream.getAudioTracks().forEach((track) => {
+        track.enabled = !updates.isMuted;
+      });
+    }
+
     set({ peers: { ...peers, [myId]: updated } });
 
     if (currentTopic) {

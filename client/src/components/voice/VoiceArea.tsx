@@ -29,7 +29,7 @@ export const VoiceArea: React.FC = () => {
     stopScreenShare 
   } = useVoiceStore();
 
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
@@ -537,13 +537,46 @@ const RemoteAudio: React.FC<{ stream?: MediaStream }> = ({ stream }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    if (audioRef.current && stream) {
+    if (!stream) return;
+
+    // 1. Play via HTML5 Audio element
+    if (audioRef.current) {
       audioRef.current.srcObject = stream;
+      audioRef.current.volume = 1.0;
       audioRef.current.play().catch(() => {});
     }
+
+    // 2. Play via Web Audio API AudioContext for reliable playback across browsers
+    let audioCtx: AudioContext | null = null;
+    try {
+      audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+      const source = audioCtx.createMediaStreamSource(stream);
+      source.connect(audioCtx.destination);
+    } catch (e) {}
+
+    const resumeAudio = () => {
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+      if (audioRef.current) {
+        audioRef.current.play().catch(() => {});
+      }
+    };
+
+    window.addEventListener('click', resumeAudio);
+    window.addEventListener('keydown', resumeAudio);
+
+    return () => {
+      window.removeEventListener('click', resumeAudio);
+      window.removeEventListener('keydown', resumeAudio);
+      try { audioCtx?.close(); } catch (e) {}
+    };
   }, [stream]);
 
-  return <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />;
+  return <audio ref={audioRef} autoPlay playsInline />;
 };
 
 export default VoiceArea;
