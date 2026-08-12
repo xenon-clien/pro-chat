@@ -33,7 +33,7 @@ export const ChannelSidebar: React.FC = () => {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNitroModalOpen, setIsNitroModalOpen] = useState(false);
-  const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(true); // Open by default matching screenshot
+  const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
   const [userStatus, setUserStatus] = useState<UserStatus>('ONLINE');
 
   const isHome = activeServerId === 'home';
@@ -51,7 +51,7 @@ export const ChannelSidebar: React.FC = () => {
 
   return (
     <>
-      <div className="w-60 bg-[#0B0E14] flex flex-col h-full shrink-0 relative border-r border-[#181D2A] select-none">
+      <div className="w-[85vw] xs:w-72 md:w-60 bg-[#0B0E14] flex flex-col h-full shrink-0 relative border-r border-[#181D2A] select-none overflow-y-auto">
         {/* Server Header Bar */}
         <div 
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}

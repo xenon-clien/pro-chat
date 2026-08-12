@@ -16,6 +16,7 @@ export const MainLayout: React.FC = () => {
   const { fetchServers, isLoading, servers, activeServerId, activeChannelId, joinServerByCode } = useServerStore();
   const [joinedToast, setJoinedToast] = useState<string | null>(null);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   const [isMobileMemberListOpen, setIsMobileMemberListOpen] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
 
@@ -89,15 +90,19 @@ export const MainLayout: React.FC = () => {
           {/* ─── Mobile Left Drawer Backdrop ─── */}
           {isMobileDrawerOpen && (
             <div 
-              className="md:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity"
+              className="md:hidden fixed inset-0 z-[55] bg-black/75 backdrop-blur-sm"
               onClick={() => setIsMobileDrawerOpen(false)}
             />
           )}
 
           {/* ─── Desktop & Mobile Left Sidebar Container ─── */}
           <div className={clsx(
-            "flex h-full shrink-0 z-50 transition-transform duration-300 ease-in-out md:translate-x-0 md:static fixed top-9 md:top-0 bottom-14 md:bottom-0 left-0",
-            isMobileDrawerOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0"
+            "flex h-full shrink-0 z-[60] transition-transform duration-300 ease-in-out",
+            // Desktop: always visible inline
+            "md:translate-x-0 md:static md:top-0 md:bottom-0",
+            // Mobile: absolutely off-screen left, slides in as overlay
+            "fixed top-9 bottom-14 left-0",
+            isMobileDrawerOpen ? "translate-x-0 shadow-[4px_0_40px_rgba(0,0,0,0.8)]" : "-translate-x-full"
           )}>
             <ServerSidebar />
             <ChannelSidebar />
@@ -124,10 +129,10 @@ export const MainLayout: React.FC = () => {
           {isMobileMemberListOpen && (
             <>
               <div 
-                className="md:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-sm"
+                className="md:hidden fixed inset-0 z-[55] bg-black/70 backdrop-blur-sm"
                 onClick={() => setIsMobileMemberListOpen(false)}
               />
-              <div className="md:hidden fixed top-9 bottom-14 right-0 z-50 w-72 bg-[#080A0F] shadow-2xl animate-scale-up border-l border-white/10 flex flex-col">
+              <div className="md:hidden fixed top-9 bottom-14 right-0 z-[60] w-72 bg-[#080A0F] shadow-2xl animate-scale-up border-l border-white/10 flex flex-col">
                 <div className="h-10 px-4 border-b border-white/10 flex items-center justify-between text-xs font-bold text-gray-300">
                   <span>Server Members</span>
                   <button 
