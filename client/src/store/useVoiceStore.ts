@@ -38,6 +38,8 @@ let currentTopic: string | null = null;
 let _micStream: MediaStream | null = null;
 let _currentUserId = '';
 let _currentInviteCode = '';
+let _audioCtx: AudioContext | null = null;
+let _micAnimFrame: any = null;
 
 function buildVoiceTopic(channelId: string, serverInviteCode?: string): string {
   const code = (serverInviteCode || channelId).toUpperCase().replace(/[^A-Z0-9]/g, '-');
@@ -61,7 +63,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
     const userId = user.id;
     _currentUserId = userId;
-    _currentInviteCode = serverInviteCode || 'PRO-HQ-8821';
+    _currentInviteCode = serverInviteCode || 'PRO-HD';
 
     const me: VoicePeer = {
       id: userId,
@@ -78,10 +80,18 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     set({ activeVoiceChannelId: channelId, peers: { [userId]: me }, isConnecting: true });
     currentTopic = buildVoiceTopic(channelId, serverInviteCode);
 
-    // ─── Get Mic (or silent fallback stream) ──────────────────
+    // ─── 1. Get Real Microphone Stream ──────────────────────────
     let micStream: MediaStream;
     try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      });
+      micStream.getAudioTracks().forEach(t => { t.enabled = true; });
     } catch {
       try {
         const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -93,16 +103,51 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     }
     _micStream = micStream;
 
-    // ─── Init PeerJS ───────────────────────────────────────
+    // ─── 2. Voice Activity Detection (Speaking Radar Glow) ───────
+    try {
+      if (micStream.getAudioTracks().length > 0) {
+        _audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const src = _audioCtx.createMediaStreamSource(micStream);
+        const analyser = _audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        src.connect(analyser);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        let wasSpeaking = false;
+
+        const checkSpeaking = () => {
+          if (!_micStream) return;
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+          const avg = sum / dataArray.length;
+          const isNowSpeaking = avg > 15;
+
+          if (isNowSpeaking !== wasSpeaking) {
+            wasSpeaking = isNowSpeaking;
+            get().updateLocalState({ isSpeaking: isNowSpeaking });
+          }
+          _micAnimFrame = requestAnimationFrame(checkSpeaking);
+        };
+        _micAnimFrame = requestAnimationFrame(checkSpeaking);
+      }
+    } catch (e) {}
+
+    // ─── 3. Init PeerJS with STUN/TURN & P2P WebRTC ─────────────
     try {
       const myPeerId = await peerJSManager.init({
-        inviteCode: serverInviteCode || 'PRO-HQ-8821',
+        inviteCode: serverInviteCode || 'PRO-HD',
         userId,
         userName: me.name,
         userAvatar: me.avatarUrl || '',
         localStream: micStream,
         onRemoteStream: (remotePeerId, stream, meta) => {
+          console.log('[VoiceStore] Remote stream received from:', remotePeerId, 'tracks:', stream.getTracks());
           const hasVideo = stream.getVideoTracks().length > 0;
+
+          // Ensure audio tracks are active
+          stream.getAudioTracks().forEach(t => { t.enabled = true; });
+
           set((state) => {
             const nextPeers = { ...state.peers };
             const existingKey = Object.keys(nextPeers).find(
@@ -158,7 +203,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         },
       }));
 
-      // Announce presence via MQTT so others call us
+      // Announce presence so remote peers call us
       if (currentTopic) {
         cloudRelay.publish(currentTopic, {
           type: 'VOICE_JOIN',
@@ -170,7 +215,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       set({ isConnecting: false });
     }
 
-    // ─── MQTT Presence subscription ────────────────────────────
+    // ─── 4. Presence Handshakes & Auto-Calling ───────────────────
     unsubPresence = cloudRelay.subscribe(currentTopic, (_, data) => {
       if (!data?.type) return;
 
@@ -210,31 +255,34 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           set((state) => ({
             peers: {
               ...state.peers,
-              [p.id]: { ...state.peers[p.id], ...p, isYou: false, lastHeartbeat: Date.now() },
+              [p.id]: { ...state.peers[p.id], ...p },
             },
           }));
         }
-      } else if (data.type === 'VOICE_LEAVE' && data.userId) {
-        set((state) => {
-          const next = { ...state.peers };
-          delete next[data.userId];
-          return { peers: next };
-        });
+      } else if (data.type === 'VOICE_LEAVE') {
+        const leaveId = data.userId;
+        if (leaveId && leaveId !== myId) {
+          set((state) => {
+            const next = { ...state.peers };
+            delete next[leaveId];
+            return { peers: next };
+          });
+        }
       }
     });
 
-    // ─── Periodic Heartbeat (every 5s) ─────────────────────────
+    // Heartbeat every 3s
     heartbeatTimer = setInterval(() => {
       const myState = get().peers[_currentUserId];
       if (myState && currentTopic) {
         cloudRelay.publish(currentTopic, {
           type: 'VOICE_HEARTBEAT',
-          peer: { ...myState, peerId: peerJSManager.getMyPeerId() },
+          peer: { ...myState, peerId: peerJSManager.getMyPeerId(), lastHeartbeat: Date.now() },
         });
       }
-    }, 5000);
+    }, 3000);
 
-    // ─── Prune Stale Peers (every 10s, timeout 20s) ────────────
+    // Prune inactive peers
     pruneTimer = setInterval(() => {
       const now = Date.now();
       const { peers } = get();
@@ -242,14 +290,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       const next = { ...peers };
 
       Object.entries(peers).forEach(([id, p]) => {
-        if (!p.isYou && p.lastHeartbeat && now - p.lastHeartbeat > 20000) {
+        if (!p.isYou && p.lastHeartbeat && now - p.lastHeartbeat > 15000) {
           delete next[id];
           changed = true;
         }
       });
 
       if (changed) set({ peers: next });
-    }, 10000);
+    }, 4000);
   },
 
   leaveVoiceChannel: () => {
@@ -264,6 +312,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     if (localScreenStream) {
       localScreenStream.getTracks().forEach(t => t.stop());
     }
+
+    if (_micAnimFrame) {
+      cancelAnimationFrame(_micAnimFrame);
+      _micAnimFrame = null;
+    }
+    try { _audioCtx?.close(); } catch (e) {}
+    _audioCtx = null;
 
     peerJSManager.cleanup();
     _micStream?.getTracks().forEach(t => t.stop());
@@ -280,7 +335,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       activeVoiceChannelId: null, 
       peers: {}, 
       myPeerId: null, 
-      isConnecting: false,
+      isConnecting: false, 
       localScreenStream: null 
     });
   },
