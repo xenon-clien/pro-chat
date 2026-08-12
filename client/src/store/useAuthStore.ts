@@ -24,30 +24,51 @@ interface AuthState {
   logout: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => {
-  // Check local storage for initial state
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
-  let initialUser: User | null = null;
-  
-  if (userStr) {
+function getStoredSession(): { user: User | null; token: string | null } {
+  if (typeof window === 'undefined') return { user: null, token: null };
+
+  // 1. Check tab-isolated sessionStorage first
+  const sessToken = sessionStorage.getItem('token');
+  const sessUser = sessionStorage.getItem('user');
+  if (sessToken && sessUser) {
     try {
-      initialUser = JSON.parse(userStr);
-    } catch (e) {
-      console.error('Failed to parse user from localStorage');
-    }
+      return { user: JSON.parse(sessUser), token: sessToken };
+    } catch (e) {}
   }
 
+  // 2. Fallback to localStorage for single-tab sessions
+  const localToken = localStorage.getItem('token');
+  const localUser = localStorage.getItem('user');
+  if (localToken && localUser) {
+    try {
+      const u = JSON.parse(localUser);
+      // Clone into sessionStorage so this tab has independent session
+      sessionStorage.setItem('token', localToken);
+      sessionStorage.setItem('user', localUser);
+      return { user: u, token: localToken };
+    } catch (e) {}
+  }
+
+  return { user: null, token: null };
+}
+
+export const useAuthStore = create<AuthState>((set, get) => {
+  const initial = getStoredSession();
+
   return {
-    user: initialUser,
-    token: token,
-    isAuthenticated: !!token,
+    user: initial.user,
+    token: initial.token,
+    isAuthenticated: !!initial.token,
     isLoading: false,
     error: null,
     
     setAuth: (user, token) => {
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('token', token);
+        sessionStorage.setItem('user', JSON.stringify(user));
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+      }
       set({ user, token, isAuthenticated: true });
     },
 
@@ -55,11 +76,12 @@ export const useAuthStore = create<AuthState>((set, get) => {
       set({ isLoading: true, error: null });
       try {
         const response = await api.post('/auth/guest');
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
-        set({ user: response.data.user, token: response.data.token, isAuthenticated: true, isLoading: false });
+        const u = response.data.user;
+        const t = response.data.token;
+        sessionStorage.setItem('token', t);
+        sessionStorage.setItem('user', JSON.stringify(u));
+        set({ user: u, token: t, isAuthenticated: true, isLoading: false });
       } catch (err: any) {
-        console.warn('Backend API offline, activating instant local guest session:', err);
         const fallbackUser: User = {
           id: 'guest-' + Math.random().toString(36).substring(2, 8),
           email: 'guest@prochat.io',
@@ -69,8 +91,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
           nitroTier: 'nitro',
         };
         const fallbackToken = 'demo-token-' + Date.now();
-        localStorage.setItem('token', fallbackToken);
-        localStorage.setItem('user', JSON.stringify(fallbackUser));
+        sessionStorage.setItem('token', fallbackToken);
+        sessionStorage.setItem('user', JSON.stringify(fallbackUser));
         set({ user: fallbackUser, token: fallbackToken, isAuthenticated: true, isLoading: false, error: null });
       }
     },
@@ -83,11 +105,12 @@ export const useAuthStore = create<AuthState>((set, get) => {
       try {
         const response = await api.patch('/auth/profile', data);
         const user = response.data;
+        sessionStorage.setItem('user', JSON.stringify(user));
         localStorage.setItem('user', JSON.stringify(user));
         set({ user, isLoading: false });
         return user;
       } catch (err: any) {
-        // Local fallback
+        sessionStorage.setItem('user', JSON.stringify(updatedUser));
         localStorage.setItem('user', JSON.stringify(updatedUser));
         set({ user: updatedUser, isLoading: false });
         return updatedUser;
@@ -95,10 +118,14 @@ export const useAuthStore = create<AuthState>((set, get) => {
     },
 
     logout: () => {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      localStorage.removeItem('nitro_status');
-      localStorage.removeItem('prochat_user_servers');
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('user');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('nitro_status');
+        localStorage.removeItem('prochat_user_servers');
+      }
       set({ user: null, token: null, isAuthenticated: false });
     },
   };

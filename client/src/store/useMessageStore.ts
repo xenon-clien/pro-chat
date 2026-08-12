@@ -3,6 +3,7 @@ import api from '../lib/api';
 import cloudRelay from '../lib/cloudRelay';
 import peerJSManager from '../lib/webRTCManager';
 import socketService from '../lib/socket';
+import { useAuthStore } from './useAuthStore';
 import { generateAiBotResponse, SAM_BOT_USER } from '../services/aiBotService';
 
 // ── Global server invite code getter ──
@@ -160,7 +161,8 @@ export const useMessageStore = create<MessageState>((set, get) => {
     },
 
     sendMessage: async (channelId: string, content: string) => {
-      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const authUser = useAuthStore.getState().user;
+      const currentUser = authUser || JSON.parse(sessionStorage.getItem('user') || localStorage.getItem('user') || '{}');
       const topic = getSharedTopic(channelId);
 
       const msg: Message = {
