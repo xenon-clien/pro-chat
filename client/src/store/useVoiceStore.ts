@@ -148,35 +148,43 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           // Ensure audio tracks are active
           stream.getAudioTracks().forEach(t => { t.enabled = true; });
 
-          set((state) => {
-            const nextPeers = { ...state.peers };
-            const existingKey = Object.keys(nextPeers).find(
-              k => nextPeers[k].peerId === remotePeerId || k === remotePeerId || remotePeerId.includes(k)
-            );
+          const updatePeerStream = () => {
+            const hasVid = stream.getVideoTracks().length > 0;
+            const cloned = new MediaStream(stream.getTracks());
+            set((state) => {
+              const next = { ...state.peers };
+              const existingKey = Object.keys(next).find(
+                k => next[k].peerId === remotePeerId || k === remotePeerId || remotePeerId.includes(k)
+              );
 
-            if (existingKey) {
-              nextPeers[existingKey] = {
-                ...nextPeers[existingKey],
-                remoteStream: stream,
-                isScreenSharing: hasVideo ? true : nextPeers[existingKey].isScreenSharing,
-                lastHeartbeat: Date.now(),
-              };
-            } else {
-              nextPeers[remotePeerId] = {
-                id: remotePeerId,
-                name: meta.name || remotePeerId,
-                avatarUrl: meta.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${remotePeerId}`,
-                isMuted: false,
-                isSpeaking: false,
-                isScreenSharing: hasVideo,
-                isYou: false,
-                lastHeartbeat: Date.now(),
-                remoteStream: stream,
-                peerId: remotePeerId,
-              };
-            }
-            return { peers: nextPeers };
-          });
+              if (existingKey) {
+                next[existingKey] = {
+                  ...next[existingKey],
+                  remoteStream: cloned,
+                  isScreenSharing: hasVid ? true : next[existingKey].isScreenSharing,
+                  lastHeartbeat: Date.now(),
+                };
+              } else {
+                next[remotePeerId] = {
+                  id: remotePeerId,
+                  name: meta.name || remotePeerId,
+                  avatarUrl: meta.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${remotePeerId}`,
+                  isMuted: false,
+                  isSpeaking: false,
+                  isScreenSharing: hasVid,
+                  isYou: false,
+                  lastHeartbeat: Date.now(),
+                  remoteStream: cloned,
+                  peerId: remotePeerId,
+                };
+              }
+              return { peers: next };
+            });
+          };
+
+          stream.onaddtrack = () => updatePeerStream();
+          stream.onremovetrack = () => updatePeerStream();
+          updatePeerStream();
         },
         onPeerLeave: (remotePeerId) => {
           set((state) => {

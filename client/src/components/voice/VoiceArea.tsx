@@ -270,9 +270,13 @@ export const VoiceArea: React.FC = () => {
               }}
               autoPlay 
               playsInline 
-              muted={isLocalScreenSharing}
+              muted 
               className="w-full h-full object-contain bg-black cursor-pointer"
               onDoubleClick={toggleFullscreen}
+              onLoadedMetadata={(e) => {
+                const vid = e.target as HTMLVideoElement;
+                vid.play().catch(() => {});
+              }}
             />
 
             {/* If stream is loading or initializing, show Standby High-Tech Preview */}
