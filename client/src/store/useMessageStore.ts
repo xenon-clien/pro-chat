@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import api from '../lib/api';
 import cloudRelay from '../lib/cloudRelay';
+import peerJSManager from '../lib/webRTCManager';
 import { generateAiBotResponse, SAM_BOT_USER } from '../services/aiBotService';
 
 // ── Global server invite code getter ──
@@ -180,6 +181,11 @@ export const useMessageStore = create<MessageState>((set, get) => {
 
       // Broadcast to all users on same server via MQTT
       cloudRelay.publish(topic, msg);
+
+      // Also broadcast over P2P DataChannel (0ms direct peer-to-peer delivery)
+      try {
+        peerJSManager.broadcastData({ type: 'CHAT_MESSAGE', message: msg, channelId });
+      } catch (e) {}
 
       // Backend API
       try {

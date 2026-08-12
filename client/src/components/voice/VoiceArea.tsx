@@ -50,22 +50,18 @@ export const VoiceArea: React.FC = () => {
 
   // Join voice channel with server invite code so all users share same MQTT topic
   useEffect(() => {
-    if (activeChannelId) {
+    if (activeChannelId && user?.id) {
       joinVoiceChannel(
         activeChannelId,
         {
-          id: user?.id || 'usr-' + Date.now(),
-          name: user?.name || 'Pro User',
-          avatarUrl: user?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${user?.name || 'Pro'}&backgroundColor=fbbf24`,
+          id: user.id,
+          name: user.name || 'Pro User',
+          avatarUrl: user.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.name}&backgroundColor=fbbf24`,
         },
         activeServer?.inviteCode
       );
     }
-
-    return () => {
-      leaveVoiceChannel();
-    };
-  }, [activeChannelId, user?.id, user?.name, user?.avatarUrl, activeServer?.inviteCode, joinVoiceChannel, leaveVoiceChannel]);
+  }, [activeChannelId, user?.id, activeServer?.inviteCode]);
 
   // Connected peers list from real-time presence
   const connectedList = Object.values(peers);
@@ -531,16 +527,23 @@ export const VoiceArea: React.FC = () => {
 
       {/* Hidden audio elements to play remote peer streams via WebRTC */}
       {connectedList.filter(p => !p.isYou && p.remoteStream).map(peer => (
-        <audio
-          key={peer.id}
-          autoPlay
-          playsInline
-          ref={(el) => { if (el && peer.remoteStream) el.srcObject = peer.remoteStream; }}
-          style={{ display: 'none' }}
-        />
+        <RemoteAudio key={peer.id} stream={peer.remoteStream} />
       ))}
     </div>
   );
+};
+
+const RemoteAudio: React.FC<{ stream?: MediaStream }> = ({ stream }) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (audioRef.current && stream) {
+      audioRef.current.srcObject = stream;
+      audioRef.current.play().catch(() => {});
+    }
+  }, [stream]);
+
+  return <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />;
 };
 
 export default VoiceArea;
