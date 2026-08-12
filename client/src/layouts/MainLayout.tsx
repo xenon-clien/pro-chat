@@ -6,6 +6,8 @@ import { VoiceArea } from '../components/voice/VoiceArea';
 import { MemberList } from '../components/chat/MemberList';
 import { FriendsView } from '../components/home/FriendsView';
 import DiscordTitleBar from '../components/ui/DiscordTitleBar';
+import SplashScreen from '../components/ui/SplashScreen';
+import MobileNavBar from '../components/mobile/MobileNavBar';
 import { useServerStore } from '../store/useServerStore';
 import { Sparkles, CheckCircle2, X } from 'lucide-react';
 import clsx from 'clsx';
@@ -15,6 +17,7 @@ export const MainLayout: React.FC = () => {
   const [joinedToast, setJoinedToast] = useState<string | null>(null);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [isMobileMemberListOpen, setIsMobileMemberListOpen] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     fetchServers();
@@ -60,84 +63,95 @@ export const MainLayout: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen w-full overflow-hidden bg-[#080A0F] select-none relative">
-      {/* Discord Top Window Title Bar with Mobile Drawer Controls */}
-      <DiscordTitleBar 
-        notificationCount="9+" 
-        onToggleMobileMenu={() => setIsMobileDrawerOpen(prev => !prev)}
-        onToggleMemberList={() => setIsMobileMemberListOpen(prev => !prev)}
-      />
+    <>
+      {/* Native App Launch Splash Screen */}
+      {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
 
-      {/* Auto-Join Toast Notification */}
-      {joinedToast && (
-        <div className="fixed top-12 left-1/2 -translate-x-1/2 z-[200] px-5 py-3 bg-emerald-500 text-black font-black text-xs rounded-2xl shadow-2xl flex items-center space-x-2 animate-scale-up border-2 border-emerald-300">
-          <CheckCircle2 size={18} className="stroke-[2.5]" />
-          <span>{joinedToast}</span>
-        </div>
-      )}
+      <div className="flex flex-col h-screen w-full overflow-hidden bg-[#080A0F] select-none relative">
+        {/* Discord Top Window Title Bar with Mobile Drawer Controls */}
+        <DiscordTitleBar 
+          notificationCount="9+" 
+          onToggleMobileMenu={() => setIsMobileDrawerOpen(prev => !prev)}
+          onToggleMemberList={() => setIsMobileMemberListOpen(prev => !prev)}
+        />
 
-      {/* Main Workspace Layout */}
-      <div className="flex flex-1 w-full overflow-hidden bg-[#0B0E14] relative">
-        
-        {/* ─── Mobile Left Drawer Backdrop ─── */}
-        {isMobileDrawerOpen && (
-          <div 
-            className="md:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity"
-            onClick={() => setIsMobileDrawerOpen(false)}
-          />
+        {/* Auto-Join Toast Notification */}
+        {joinedToast && (
+          <div className="fixed top-12 left-1/2 -translate-x-1/2 z-[200] px-5 py-3 bg-emerald-500 text-black font-black text-xs rounded-2xl shadow-2xl flex items-center space-x-2 animate-scale-up border-2 border-emerald-300">
+            <CheckCircle2 size={18} className="stroke-[2.5]" />
+            <span>{joinedToast}</span>
+          </div>
         )}
 
-        {/* ─── Desktop & Mobile Left Sidebar Container ─── */}
-        <div className={clsx(
-          "flex h-full shrink-0 z-50 transition-transform duration-300 ease-in-out md:translate-x-0 md:static fixed top-9 md:top-0 bottom-0 left-0",
-          isMobileDrawerOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0"
-        )}>
-          <ServerSidebar />
-          <ChannelSidebar />
-        </div>
+        {/* Main Workspace Layout */}
+        <div className="flex flex-1 w-full overflow-hidden bg-[#0B0E14] relative">
+          
+          {/* ─── Mobile Left Drawer Backdrop ─── */}
+          {isMobileDrawerOpen && (
+            <div 
+              className="md:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity"
+              onClick={() => setIsMobileDrawerOpen(false)}
+            />
+          )}
 
-        {/* ─── Center: Main Content (Friends / Voice / Chat) ─── */}
-        <div className="flex-1 flex h-full min-w-0 overflow-hidden relative">
-          {isHome ? (
-            <FriendsView />
-          ) : activeChannel?.type === 'VOICE' ? (
-            <div className="flex flex-1 h-full min-w-0 overflow-hidden relative">
-              <VoiceArea />
-              {/* Desktop MemberList */}
-              <div className="hidden lg:block h-full shrink-0">
-                <MemberList serverId={activeServer?.id || 'pro-chat-hq'} />
+          {/* ─── Desktop & Mobile Left Sidebar Container ─── */}
+          <div className={clsx(
+            "flex h-full shrink-0 z-50 transition-transform duration-300 ease-in-out md:translate-x-0 md:static fixed top-9 md:top-0 bottom-14 md:bottom-0 left-0",
+            isMobileDrawerOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0"
+          )}>
+            <ServerSidebar />
+            <ChannelSidebar />
+          </div>
+
+          {/* ─── Center: Main Content (Friends / Voice / Chat) ─── */}
+          <div className="flex-1 flex h-full min-w-0 overflow-hidden relative">
+            {isHome ? (
+              <FriendsView />
+            ) : activeChannel?.type === 'VOICE' ? (
+              <div className="flex flex-1 h-full min-w-0 overflow-hidden relative">
+                <VoiceArea />
+                {/* Desktop MemberList */}
+                <div className="hidden lg:block h-full shrink-0">
+                  <MemberList serverId={activeServer?.id || 'pro-chat-hq'} />
+                </div>
               </div>
-            </div>
-          ) : (
-            <ChatArea />
+            ) : (
+              <ChatArea />
+            )}
+          </div>
+
+          {/* ─── Mobile Right MemberList Drawer ─── */}
+          {isMobileMemberListOpen && (
+            <>
+              <div 
+                className="md:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-sm"
+                onClick={() => setIsMobileMemberListOpen(false)}
+              />
+              <div className="md:hidden fixed top-9 bottom-14 right-0 z-50 w-72 bg-[#080A0F] shadow-2xl animate-scale-up border-l border-white/10 flex flex-col">
+                <div className="h-10 px-4 border-b border-white/10 flex items-center justify-between text-xs font-bold text-gray-300">
+                  <span>Server Members</span>
+                  <button 
+                    onClick={() => setIsMobileMemberListOpen(false)}
+                    className="p-1 rounded-lg hover:bg-white/10 text-gray-400"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  <MemberList serverId={activeServer?.id || 'pro-chat-hq'} />
+                </div>
+              </div>
+            </>
           )}
         </div>
 
-        {/* ─── Mobile Right MemberList Drawer ─── */}
-        {isMobileMemberListOpen && (
-          <>
-            <div 
-              className="md:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-sm"
-              onClick={() => setIsMobileMemberListOpen(false)}
-            />
-            <div className="md:hidden fixed top-9 bottom-0 right-0 z-50 w-72 bg-[#080A0F] shadow-2xl animate-scale-up border-l border-white/10 flex flex-col">
-              <div className="h-10 px-4 border-b border-white/10 flex items-center justify-between text-xs font-bold text-gray-300">
-                <span>Server Members</span>
-                <button 
-                  onClick={() => setIsMobileMemberListOpen(false)}
-                  className="p-1 rounded-lg hover:bg-white/10 text-gray-400"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                <MemberList serverId={activeServer?.id || 'pro-chat-hq'} />
-              </div>
-            </div>
-          </>
-        )}
+        {/* ─── Mobile Bottom Navigation Bar (Discord Mobile App Style) ─── */}
+        <MobileNavBar 
+          onToggleDrawer={() => setIsMobileDrawerOpen(prev => !prev)}
+          isDrawerOpen={isMobileDrawerOpen}
+        />
       </div>
-    </div>
+    </>
   );
 };
 
