@@ -3,8 +3,12 @@ import MainLayout from './layouts/MainLayout';
 import AuthGuard from './components/auth/AuthGuard';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import { usePwaAutoUpdate } from './hooks/usePwaAutoUpdate';
 
 function App() {
+  // Automatically update installed PWA app whenever new code is deployed to Vercel
+  usePwaAutoUpdate();
+
   return (
     <Router>
       <Routes>
