@@ -30,7 +30,8 @@ const Login = () => {
       nitroTier: 'nitro' as const,
     };
     setAuth(fallbackUser, 'demo-token-' + Date.now());
-    navigate('/', { replace: true });
+    const query = typeof window !== 'undefined' ? window.location.search : '';
+    navigate('/' + query, { replace: true });
   };
 
   const handleGuestLogin = () => {

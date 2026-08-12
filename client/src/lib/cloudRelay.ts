@@ -1,14 +1,11 @@
 /**
- * ProChat Cloud Realtime Relay
- * Pure TypeScript MQTT 3.1.1 over WebSockets client with proper variable-length encoding,
- * correct 2-byte packet IDs, multi-broker auto-failover, and automatic resubscription.
+ * ProChat Robust Real-Time Cloud Relay
+ * Complete MQTT 3.1.1 WebSocket client with multi-packet frame parser,
+ * case-insensitive topic routing, keep-alive heartbeat, and instant resubscription.
  */
 
 type MessageHandler = (topic: string, data: any) => void;
 
-/**
- * MQTT variable-length encoding (handles payloads > 127 bytes correctly).
- */
 function encodeRemainingLength(len: number): number[] {
   const result: number[] = [];
   do {
@@ -20,20 +17,14 @@ function encodeRemainingLength(len: number): number[] {
   return result;
 }
 
-const BROKERS = [
-  'wss://broker.emqx.io:8084/mqtt',
-  'wss://broker.hivemq.com:8884/mqtt',
-];
-
 class CloudRealtimeRelay {
   private ws: WebSocket | null = null;
   private isConnected = false;
   private subscribers = new Map<string, Set<MessageHandler>>();
-  private clientId = 'pc_' + Math.random().toString(36).substring(2, 8) + '_' + Date.now().toString(36);
+  private clientId = 'prochat_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36);
   private reconnectTimer: any = null;
   private pingInterval: any = null;
   private pendingQueue: Array<{ topic: string; data: any }> = [];
-  private brokerIndex = 0;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -47,10 +38,7 @@ class CloudRealtimeRelay {
     }
 
     try {
-      const brokerUrl = BROKERS[this.brokerIndex % BROKERS.length];
-      console.log('[CloudRelay] Connecting to broker:', brokerUrl);
-
-      this.ws = new WebSocket(brokerUrl, 'mqttv3.1.1');
+      this.ws = new WebSocket('wss://broker.emqx.io:8084/mqtt', 'mqttv3.1.1');
       this.ws.binaryType = 'arraybuffer';
 
       this.ws.onopen = () => {
@@ -58,22 +46,19 @@ class CloudRealtimeRelay {
       };
 
       this.ws.onmessage = (event) => {
-        this.handleMessage(event.data);
+        this.handleRawFrame(event.data);
       };
 
       this.ws.onclose = () => {
         this.isConnected = false;
         this.cleanupPing();
-        this.brokerIndex++; // Try next broker on failure
         this.scheduleReconnect();
       };
 
-      this.ws.onerror = (err) => {
-        console.warn('[CloudRelay] WebSocket error, switching broker...');
+      this.ws.onerror = () => {
         this.ws?.close();
       };
     } catch (e) {
-      this.brokerIndex++;
       this.scheduleReconnect();
     }
   }
@@ -81,11 +66,10 @@ class CloudRealtimeRelay {
   private sendConnectPacket() {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
-    // MQTT 3.1.1 CONNECT packet
     const protocol = [0, 4, 77, 81, 84, 84]; // "MQTT"
     const version = [4]; // level 3.1.1
     const flags = [2]; // clean session
-    const keepAlive = [0, 60]; // 60s
+    const keepAlive = [0, 45]; // 45s
 
     const clientIdBytes = new TextEncoder().encode(this.clientId);
     const clientIdLen = [Math.floor(clientIdBytes.length / 256), clientIdBytes.length % 256];
@@ -98,17 +82,34 @@ class CloudRealtimeRelay {
     this.ws.send(packet.buffer);
   }
 
-  private handleMessage(data: ArrayBuffer) {
+  /**
+   * Handle incoming WebSocket frames, parsing all sequential MQTT packets in the buffer
+   */
+  private handleRawFrame(data: ArrayBuffer) {
     const bytes = new Uint8Array(data);
-    if (bytes.length < 2) return;
+    let cursor = 0;
 
-    const packetType = bytes[0] >> 4;
+    while (cursor < bytes.length) {
+      const headerByte = bytes[cursor++];
+      const packetType = headerByte >> 4;
 
-    // CONNACK (Packet Type 2)
-    if (packetType === 2) {
-      if (bytes[3] === 0) {
+      // Decode remaining length
+      let remainLen = 0;
+      let multiplier = 1;
+      let digit: number;
+      do {
+        if (cursor >= bytes.length) return;
+        digit = bytes[cursor++];
+        remainLen += (digit & 0x7f) * multiplier;
+        multiplier *= 128;
+      } while ((digit & 0x80) !== 0 && multiplier <= 128 * 128 * 128);
+
+      const packetEnd = cursor + remainLen;
+      if (packetEnd > bytes.length) break;
+
+      // ─── CONNACK (Packet Type 2) ───────────────────────────
+      if (packetType === 2) {
         this.isConnected = true;
-        console.log('[CloudRelay] Connected & Authenticated successfully!');
         this.startPing();
 
         // Resubscribe to all active topics
@@ -116,51 +117,56 @@ class CloudRealtimeRelay {
           this.sendSubscribePacket(topic);
         });
 
-        // Flush pending queue
+        // Flush queued messages
         const queued = [...this.pendingQueue];
         this.pendingQueue = [];
         queued.forEach(({ topic, data: d }) => this.publish(topic, d));
       }
-      return;
-    }
 
-    // PUBLISH (Packet Type 3)
-    if (packetType === 3) {
-      let offset = 1;
+      // ─── PUBLISH (Packet Type 3) ───────────────────────────
+      else if (packetType === 3) {
+        let pOffset = cursor;
+        if (pOffset + 2 <= packetEnd) {
+          const topicLen = (bytes[pOffset] << 8) | bytes[pOffset + 1];
+          pOffset += 2;
 
-      // Decode variable-length remaining length
-      let remainLen = 0;
-      let multiplier = 1;
-      let digit: number;
-      do {
-        if (offset >= bytes.length) return;
-        digit = bytes[offset++];
-        remainLen += (digit & 0x7F) * multiplier;
-        multiplier *= 128;
-      } while ((digit & 0x80) !== 0 && multiplier <= 128 * 128 * 128);
+          if (pOffset + topicLen <= packetEnd) {
+            const topicBytes = bytes.subarray(pOffset, pOffset + topicLen);
+            const rawTopic = new TextDecoder().decode(topicBytes);
+            pOffset += topicLen;
 
-      if (offset + 2 > bytes.length) return;
-      const topicLen = (bytes[offset] << 8) | bytes[offset + 1];
-      offset += 2;
+            const payloadBytes = bytes.subarray(pOffset, packetEnd);
+            const payloadStr = new TextDecoder().decode(payloadBytes);
 
-      if (offset + topicLen > bytes.length) return;
-      const topicBytes = bytes.subarray(offset, offset + topicLen);
-      const topic = new TextDecoder().decode(topicBytes);
-      offset += topicLen;
-
-      const payloadBytes = bytes.subarray(offset);
-      const payloadStr = new TextDecoder().decode(payloadBytes);
-
-      try {
-        const parsed = JSON.parse(payloadStr);
-        const handlers = this.subscribers.get(topic);
-        if (handlers) {
-          handlers.forEach((h) => h(topic, parsed));
+            try {
+              const parsed = JSON.parse(payloadStr);
+              this.dispatchMessage(rawTopic, parsed);
+            } catch (e) {
+              // Not JSON
+            }
+          }
         }
-      } catch (e) {
-        // Not JSON
       }
+
+      cursor = packetEnd;
     }
+  }
+
+  private dispatchMessage(rawTopic: string, data: any) {
+    const normalizedTopic = rawTopic.toLowerCase().trim();
+
+    this.subscribers.forEach((handlers, subTopic) => {
+      const normalizedSub = subTopic.toLowerCase().trim();
+      if (normalizedSub === normalizedTopic) {
+        handlers.forEach((h) => {
+          try {
+            h(rawTopic, data);
+          } catch (err) {
+            console.warn('[CloudRelay] Handler error:', err);
+          }
+        });
+      }
+    });
   }
 
   private sendSubscribePacket(topic: string) {
@@ -169,7 +175,6 @@ class CloudRealtimeRelay {
     const topicBytes = new TextEncoder().encode(topic);
     const topicLen = [Math.floor(topicBytes.length / 256), topicBytes.length % 256];
 
-    // ✅ FIXED: Correct 2-byte MQTT packet identifier
     const pid = Math.floor(Math.random() * 65534) + 1;
     const packetId = [Math.floor(pid / 256), pid % 256];
     const qos = [0];
@@ -186,7 +191,7 @@ class CloudRealtimeRelay {
     this.cleanupPing();
     this.pingInterval = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN && this.isConnected) {
-        this.ws.send(new Uint8Array([0xC0, 0x00]).buffer); // PINGREQ
+        this.ws.send(new Uint8Array([0xc0, 0x00]).buffer); // PINGREQ
       }
     }, 15000);
   }
@@ -207,21 +212,22 @@ class CloudRealtimeRelay {
   }
 
   public subscribe(topic: string, handler: MessageHandler) {
-    if (!this.subscribers.has(topic)) {
-      this.subscribers.set(topic, new Set());
+    const norm = topic.toLowerCase().trim();
+    if (!this.subscribers.has(norm)) {
+      this.subscribers.set(norm, new Set());
     }
-    this.subscribers.get(topic)!.add(handler);
+    this.subscribers.get(norm)!.add(handler);
 
     if (this.isConnected) {
       this.sendSubscribePacket(topic);
     }
 
     return () => {
-      const set = this.subscribers.get(topic);
+      const set = this.subscribers.get(norm);
       if (set) {
         set.delete(handler);
         if (set.size === 0) {
-          this.subscribers.delete(topic);
+          this.subscribers.delete(norm);
         }
       }
     };
@@ -240,7 +246,6 @@ class CloudRealtimeRelay {
 
     const varHeader = [...topicLen, ...Array.from(topicBytes)];
     const payload = [...Array.from(payloadBytes)];
-
     const remainLenBytes = encodeRemainingLength(varHeader.length + payload.length);
 
     const packet = new Uint8Array([0x30, ...remainLenBytes, ...varHeader, ...payload]);
