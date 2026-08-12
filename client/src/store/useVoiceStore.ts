@@ -334,23 +334,45 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
   startScreenShare: async () => {
     try {
-      const screenStream = await (navigator.mediaDevices as any).getDisplayMedia({
-        video: { 
-          frameRate: 60, 
-          width: { ideal: 1920 }, 
-          height: { ideal: 1080 } 
-        },
-        audio: true,
-      });
+      // ─── Mobile Detection ───────────────────────────────────
+      // getDisplayMedia is NOT supported on Android Chrome or iOS Safari.
+      // On mobile, we fall back to the rear/front camera as a "camera share" 
+      // (same as Zoom and Teams do on mobile).
+      const isDesktopShare = typeof navigator.mediaDevices.getDisplayMedia === 'function';
+
+      let screenStream: MediaStream;
+
+      if (isDesktopShare) {
+        // ─── Desktop: Real Screen Share ───────────────────────
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            frameRate: { ideal: 30, max: 60 },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: true,
+        });
+      } else {
+        // ─── Mobile: Camera Fallback (like Zoom mobile) ───────
+        screenStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment', // rear camera
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 24 },
+          },
+          audio: false,
+        });
+      }
 
       set({ localScreenStream: screenStream });
 
-      // Combine Screen Video track + Mic Audio track into a combined broadcast stream
+      // Combine Screen/Camera Video track + Mic Audio track
       const combinedTracks: MediaStreamTrack[] = [
         ...screenStream.getVideoTracks(),
       ];
 
-      // Add mic audio track if available so user's voice is transmitted during screen share
+      // Add mic audio if available
       if (_micStream && _micStream.getAudioTracks().length > 0) {
         combinedTracks.push(_micStream.getAudioTracks()[0]);
       } else if (screenStream.getAudioTracks().length > 0) {
@@ -376,6 +398,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       return null;
     }
   },
+
 
   stopScreenShare: () => {
     const { localScreenStream, peers } = get();

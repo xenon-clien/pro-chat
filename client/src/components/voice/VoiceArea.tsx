@@ -495,7 +495,7 @@ export const VoiceArea: React.FC = () => {
           </button>
         </div>
 
-        {/* Right: Share Screen Button */}
+        {/* Right: Share Screen / Camera Share Button */}
         <div className="flex items-center space-x-2">
           {isLocalScreenSharing ? (
             <button
@@ -503,15 +503,29 @@ export const VoiceArea: React.FC = () => {
               className="h-10 md:h-12 px-4 md:px-6 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-black text-[11px] md:text-xs shadow-xl shadow-rose-600/30 transition-all cursor-pointer flex items-center space-x-1.5 md:space-x-2"
             >
               <ScreenShare size={16} />
-              <span>Stop Sharing</span>
+              <span>Stop</span>
             </button>
           ) : (
             <button
-              onClick={() => setIsScreenModalOpen(true)}
-              className="h-10 md:h-12 px-4 md:px-6 rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-500 to-pink-500 hover:from-blue-500 hover:via-cyan-400 hover:to-pink-400 text-white font-black text-[11px] md:text-xs tracking-wide shadow-xl shadow-cyan-500/25 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center space-x-1.5 md:space-x-2"
+              onClick={() => {
+                // On mobile: getDisplayMedia not supported — skip modal, use camera directly
+                const isMobileDevice = !navigator.mediaDevices.getDisplayMedia;
+                if (isMobileDevice) {
+                  handleStartStream({ resolution: '720p', fps: '24', shareAudio: false });
+                } else {
+                  setIsScreenModalOpen(true);
+                }
+              }}
+              className="h-10 md:h-12 px-3 md:px-6 rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-500 to-pink-500 hover:from-blue-500 hover:via-cyan-400 hover:to-pink-400 text-white font-black text-[11px] md:text-xs tracking-wide shadow-xl shadow-cyan-500/25 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center space-x-1.5 md:space-x-2"
             >
               <ScreenShare size={16} />
-              <span>Share Screen</span>
+              <span className="hidden xs:inline">
+                {typeof navigator !== 'undefined' && !navigator.mediaDevices?.getDisplayMedia
+                  ? 'Camera Share'
+                  : 'Share Screen'
+                }
+              </span>
+              <span className="xs:hidden">Share</span>
             </button>
           )}
         </div>
