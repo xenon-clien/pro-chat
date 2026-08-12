@@ -78,10 +78,13 @@ export const VoiceArea: React.FC = () => {
   useEffect(() => {
     const vid = screenVideoRef.current;
     if (vid && currentScreenStream) {
-      if (vid.srcObject !== currentScreenStream) {
-        vid.srcObject = currentScreenStream;
+      const vidTracks = currentScreenStream.getVideoTracks();
+      if (vidTracks.length > 0) {
+        // Create a video-only stream so <video muted> doesn't mute the audio tracks!
+        const videoOnlyStream = new MediaStream(vidTracks);
+        vid.srcObject = videoOnlyStream;
+        vid.play().catch(() => {});
       }
-      vid.play().catch(() => {});
     }
   }, [currentScreenStream]);
 
@@ -539,11 +542,17 @@ const RemoteAudio: React.FC<{ stream?: MediaStream }> = ({ stream }) => {
 
   useEffect(() => {
     if (!stream || !audioRef.current) return;
+    const audioTracks = stream.getAudioTracks();
+    if (audioTracks.length === 0) return;
+
+    // Ensure audio tracks are active
+    audioTracks.forEach(t => { t.enabled = true; });
+
+    const audioOnly = new MediaStream(audioTracks);
     const el = audioRef.current;
-    if (el.srcObject !== stream) {
-      el.srcObject = stream;
-    }
+    el.srcObject = audioOnly;
     el.volume = 1.0;
+    el.muted = false;
     el.play().catch(() => {});
 
     const tryPlay = () => {
