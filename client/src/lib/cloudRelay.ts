@@ -154,7 +154,7 @@ class CloudRealtimeRelay {
             try {
               const parsed = JSON.parse(payloadStr);
               // Deduplicate using msgId or senderId
-              const msgId = parsed?.msgId || (parsed?.id ? parsed.id + '_' + parsed.lastSeen : null);
+              const msgId = parsed?._msgId || parsed?.msgId;
               if (msgId) {
                 if (this.seenMsgIds.has(msgId)) {
                   cursor = packetEnd;
@@ -245,7 +245,7 @@ class CloudRealtimeRelay {
   }
 
   public publish(topic: string, data: any) {
-    const msgId = data?.id || 'msg_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
+    const msgId = 'msg_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
     const payloadWithMeta = { ...data, _senderId: this.clientId, _msgId: msgId };
 
     // 1. Broadcast locally
