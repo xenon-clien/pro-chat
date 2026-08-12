@@ -67,7 +67,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       id: userId,
       name: user.name,
       avatarUrl: user.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.name}&backgroundColor=fbbf24`,
-      isMuted: true,
+      isMuted: false,
       isSpeaking: false,
       isScreenSharing: false,
       isCameraOn: false,

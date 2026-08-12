@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Crown, Sparkles, Bot } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useVoiceStore } from '../../store/useVoiceStore';
@@ -21,38 +21,43 @@ interface PresenceState {
   members: Record<string, PresenceMember>;
   upsertMember: (m: PresenceMember) => void;
   removeStaleMember: (id: string) => void;
-  clearMembers: () => void;
 }
 
 export const usePresenceStore = create<PresenceState>((set, get) => ({
   members: {},
-  upsertMember: (m) => set({ members: { ...get().members, [m.id]: m } }),
+  upsertMember: (m) => {
+    if (!m || !m.id) return;
+    const cur = get().members;
+    set({ members: { ...cur, [m.id]: { ...cur[m.id], ...m, lastSeen: Date.now() } } });
+  },
   removeStaleMember: (id) => {
     const next = { ...get().members };
     delete next[id];
     set({ members: next });
   },
-  clearMembers: () => set({ members: {} }),
 }));
 
 interface MemberListProps {
   serverId: string;
 }
 
-const HEARTBEAT_INTERVAL = 3000; // every 3s for ultra-fast discovery
-const MEMBER_TIMEOUT = 16000;    // remove if silent for 16s
+const HEARTBEAT_INTERVAL = 2500; // heartbeat every 2.5s
+const MEMBER_TIMEOUT = 14000;     // remove if silent for 14s
 
 export const MemberList: React.FC<MemberListProps> = () => {
   const { user: currentUser } = useAuthStore();
   const { peers } = useVoiceStore();
   const { servers, activeServerId } = useServerStore();
-  const { members, upsertMember, removeStaleMember, clearMembers } = usePresenceStore();
+  const { members, upsertMember, removeStaleMember } = usePresenceStore();
 
   const activeServer = servers.find(s => s.id === activeServerId) || servers[0];
   const inviteCode = (activeServer?.inviteCode || 'PRO-HD').toUpperCase().replace(/[^A-Z0-9]/g, '-');
   const presenceTopic = `prochat/v2/presence/${inviteCode}`;
 
-  // ── Publish MY presence heartbeat ──
+  const currentTopicRef = useRef<string>(presenceTopic);
+  currentTopicRef.current = presenceTopic;
+
+  // ── Publish Presence & Listen ──
   useEffect(() => {
     if (!currentUser || !presenceTopic) return;
 
@@ -63,51 +68,30 @@ export const MemberList: React.FC<MemberListProps> = () => {
       lastSeen: Date.now(),
     };
 
-    // Announce immediately on load
+    // Broadcast immediately on mount / topic switch
     cloudRelay.publish(presenceTopic, me);
 
-    // Heartbeat every 3s
+    // Subscribe to presence
+    const unsub = cloudRelay.subscribe(presenceTopic, (_, data: PresenceMember) => {
+      if (data?.id && data.id !== currentUser.id) {
+        upsertMember(data);
+        // Reply with our presence so the peer sees us immediately
+        cloudRelay.publish(presenceTopic, {
+          id: currentUser.id,
+          name: currentUser.name,
+          avatarUrl: currentUser.avatarUrl,
+          lastSeen: Date.now(),
+        });
+      }
+    });
+
+    // Heartbeat timer
     const heartbeat = setInterval(() => {
       cloudRelay.publish(presenceTopic, { ...me, lastSeen: Date.now() });
     }, HEARTBEAT_INTERVAL);
 
-    return () => clearInterval(heartbeat);
-  }, [currentUser, presenceTopic]);
-
-  // ── Subscribe to others' presence ──
-  useEffect(() => {
-    if (!presenceTopic) return;
-
-    // Reset presence for new server
-    clearMembers();
-
-    // Initial broadcast
-    if (currentUser) {
-      cloudRelay.publish(presenceTopic, {
-        id: currentUser.id,
-        name: currentUser.name,
-        avatarUrl: currentUser.avatarUrl,
-        lastSeen: Date.now(),
-      });
-    }
-
-    const unsub = cloudRelay.subscribe(presenceTopic, (_, data: PresenceMember) => {
-      if (data?.id && data.id !== currentUser?.id) {
-        upsertMember({ ...data, lastSeen: Date.now() });
-        // Immediately reply with our presence so the new user sees us instantly
-        if (currentUser) {
-          cloudRelay.publish(presenceTopic, {
-            id: currentUser.id,
-            name: currentUser.name,
-            avatarUrl: currentUser.avatarUrl,
-            lastSeen: Date.now(),
-          });
-        }
-      }
-    });
-
-    // Cleanup stale members
-    const staleCheck = setInterval(() => {
+    // Prune timer
+    const prune = setInterval(() => {
       const now = Date.now();
       Object.values(usePresenceStore.getState().members).forEach(m => {
         if (now - m.lastSeen > MEMBER_TIMEOUT) {
@@ -118,9 +102,10 @@ export const MemberList: React.FC<MemberListProps> = () => {
 
     return () => {
       unsub();
-      clearInterval(staleCheck);
+      clearInterval(heartbeat);
+      clearInterval(prune);
     };
-  }, [presenceTopic, currentUser?.id, currentUser?.name, currentUser?.avatarUrl, upsertMember, removeStaleMember, clearMembers]);
+  }, [presenceTopic, currentUser?.id, currentUser?.name, currentUser?.avatarUrl, upsertMember, removeStaleMember]);
 
   // ── Build final member list ──
   const voicePeersList = Object.values(peers);
