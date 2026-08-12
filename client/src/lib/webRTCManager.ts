@@ -188,44 +188,49 @@ class PeerJSManager {
   }
 
   /**
-   * Broadcast screen share stream to all peers by updating tracks & calling any new peers
+   * Broadcast screen share stream to all peers by establishing clean WebRTC video call
    */
   async replaceStream(newStream: MediaStream) {
     this.localStream = newStream;
 
-    // Update existing peer connections with new tracks
-    for (const [peerId, call] of this.calls) {
-      const pc = (call as any).peerConnection as RTCPeerConnection;
-      if (!pc) continue;
+    // Collect all peer IDs currently in call
+    const targetPeerIds = Array.from(this.calls.keys());
 
-      try {
-        const senders = pc.getSenders();
-        for (const track of newStream.getTracks()) {
-          const sender = senders.find(s => s.track?.kind === track.kind);
-          if (sender) {
-            await sender.replaceTrack(track).catch(() => {});
-          } else {
-            try {
-              pc.addTrack(track, newStream);
-            } catch (e) {}
-          }
-        }
-      } catch (e) {
-        console.warn('[PeerJS] Replace stream error on peer:', peerId, e);
-      }
+    // Close old voice-only media connections
+    this.calls.forEach((call) => {
+      try { call.close(); } catch (e) {}
+    });
+    this.calls.clear();
 
-      // Re-call peer with screen stream to guarantee video playback on their end
-      if (this.peer && newStream.getVideoTracks().length > 0) {
+    // Call each peer with the new stream (contains video track)
+    for (const peerId of targetPeerIds) {
+      if (this.peer && peerId !== this.myPeerId) {
         try {
+          console.log('[PeerJS] Establishing fresh Screen Stream call to:', peerId);
           const screenCall = this.peer.call(peerId, newStream, {
             metadata: { ...this.myMeta, isScreen: true }
           });
+
           if (screenCall) {
+            this.calls.set(peerId, screenCall);
+
             screenCall.on('stream', (rStream) => {
+              console.log('[PeerJS] Stream on outbound screen call:', peerId, 'tracks:', rStream.getTracks());
               this.onRemoteStream?.(peerId, rStream, { name: this.myMeta.name, avatarUrl: this.myMeta.avatarUrl });
             });
+
+            screenCall.on('close', () => {
+              this.calls.delete(peerId);
+            });
+
+            screenCall.on('error', (e) => {
+              console.warn('[PeerJS] Screen call error:', e);
+              this.calls.delete(peerId);
+            });
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('[PeerJS] Screen call exception:', e);
+        }
       }
     }
   }
