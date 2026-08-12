@@ -30,6 +30,12 @@ const Register = () => {
     };
     setAuth(fallbackUser, 'demo-token-' + Date.now());
     localStorage.removeItem('prochat_user_servers');
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('prochat_msgs_')) localStorage.removeItem(key);
+    });
+    Object.keys(sessionStorage).forEach((key) => {
+      if (key.startsWith('prochat_msgs_')) sessionStorage.removeItem(key);
+    });
     const query = typeof window !== 'undefined' ? window.location.search : '';
     navigate('/' + query, { replace: true });
   };

@@ -33,6 +33,22 @@ interface MessageState {
   fetchMessages: (channelId: string) => Promise<void>;
   addMessage: (message: Message) => void;
   sendMessage: (channelId: string, content: string) => Promise<void>;
+  clearMessages: () => void;
+}
+
+export function clearAllMessageCache() {
+  if (typeof window !== 'undefined') {
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('prochat_msgs_')) {
+        localStorage.removeItem(key);
+      }
+    });
+    Object.keys(sessionStorage).forEach((key) => {
+      if (key.startsWith('prochat_msgs_')) {
+        sessionStorage.removeItem(key);
+      }
+    });
+  }
 }
 
 const SEED_MESSAGES: Record<string, Message[]> = {
@@ -87,7 +103,7 @@ const playNotificationChime = () => {
  * Returns a globally-shared MQTT topic so all users in same server share messages in real time.
  */
 function getSharedTopic(channelId: string): string {
-  const inviteCode = _getActiveServerInviteCode() || 'PRO-HQ-8821';
+  const inviteCode = _getActiveServerInviteCode() || 'PRO-HD';
   const cleanCode = inviteCode.toUpperCase().replace(/[^A-Z0-9]/g, '-');
   return `prochat/v2/s/${cleanCode}/text`;
 }
@@ -100,6 +116,11 @@ export const useMessageStore = create<MessageState>((set, get) => {
     isLoading: false,
     error: null,
     activeChannelId: 'ch-general',
+
+    clearMessages: () => {
+      clearAllMessageCache();
+      set({ messages: SEED_MESSAGES['ch-general'] || [] });
+    },
 
     fetchMessages: async (channelId: string) => {
       set({ isLoading: true, error: null, activeChannelId: channelId });
@@ -121,13 +142,7 @@ export const useMessageStore = create<MessageState>((set, get) => {
         }
       });
 
-      const storageKey = `prochat_msgs_${topic.replace(/\//g, '_')}_${channelId}`;
-      let localSaved: Message[] = [];
-      try {
-        const raw = localStorage.getItem(storageKey);
-        if (raw) localSaved = JSON.parse(raw);
-      } catch (e) {}
-
+      // Try backend first
       try {
         const response = await api.get(`/messages/${channelId}`);
         if (Array.isArray(response.data) && response.data.length > 0) {
@@ -136,8 +151,10 @@ export const useMessageStore = create<MessageState>((set, get) => {
         }
       } catch (err: any) {}
 
+      // In-session seeds only (no persistent old user chat across logins)
       const seeds = SEED_MESSAGES[channelId] || [];
-      const combined = [...localSaved, ...seeds];
+      const current = get().messages.filter(m => m.channelId === channelId);
+      const combined = current.length > 0 ? current : seeds;
       const uniqueMap = new Map<string, Message>();
       combined.forEach((m) => uniqueMap.set(m.id, m));
 
@@ -148,15 +165,6 @@ export const useMessageStore = create<MessageState>((set, get) => {
       const current = get().messages;
       if (!current.find((m) => m.id === message.id)) {
         set({ messages: [...current, message] });
-        try {
-          const topic = getSharedTopic(message.channelId);
-          const storageKey = `prochat_msgs_${topic.replace(/\//g, '_')}_${message.channelId}`;
-          const saved: Message[] = JSON.parse(localStorage.getItem(storageKey) || '[]');
-          if (!saved.find((m) => m.id === message.id)) {
-            const trimmed = [message, ...saved].slice(0, 200);
-            localStorage.setItem(storageKey, JSON.stringify(trimmed));
-          }
-        } catch (e) {}
       }
     },
 
