@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { generateAiBotResponse, SAM_BOT_USER, type AiBotResponse } from '../../services/aiBotService';
 import { useAuthStore } from '../../store/useAuthStore';
+import { useServerStore } from '../../store/useServerStore';
 import clsx from 'clsx';
 
 interface AiMessage {
@@ -103,6 +104,24 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
     } else if (actionType === 'settings') {
       onClose();
       onOpenSettings?.();
+    } else if (actionType === 'voice' || actionType === 'screenshare') {
+      onClose();
+      const hq = useServerStore.getState().servers.find(s => s.id === 'pro-chat-hq') || useServerStore.getState().servers[0];
+      const voiceCh = hq?.channels.find(c => c.type === 'VOICE');
+      if (voiceCh) {
+        useServerStore.getState().setActiveChannel(voiceCh.id);
+      }
+    } else if (actionType === 'fix_profile') {
+      useServerStore.getState().resetToSingleOfficialServer();
+      setMessages(prev => [
+        ...prev,
+        {
+          id: 'msg-bot-reset-' + Date.now(),
+          sender: 'bot',
+          content: '✅ **Done!** All cluttered profiles have been removed. You are now cleanly connected to **Pro Chat HQ** with code `PRO-HD`! 🎉',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }
+      ]);
     }
   };
 
