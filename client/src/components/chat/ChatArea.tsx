@@ -106,8 +106,8 @@ export const ChatArea: React.FC = () => {
     <div className="flex-1 flex h-full bg-[#080B11] min-w-0 overflow-hidden select-none">
       {/* ──────── CENTER CHAT COLUMN ──────── */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-[#080B11]">
-        {/* Top Header Bar */}
-        <div className="h-14 border-b border-[#141A28] px-6 flex items-center justify-between shrink-0 bg-[#0B0E17]">
+        {/* Top Header Bar - compact on mobile like Discord */}
+        <div className="h-12 md:h-14 border-b border-[#141A28] px-3 md:px-6 flex items-center justify-between shrink-0 bg-[#0B0E17]">
           <div className="flex items-center space-x-3 min-w-0">
             {isAiChannel ? (
               <Bot size={22} className="text-cyan-400 shrink-0" />
@@ -174,9 +174,9 @@ export const ChatArea: React.FC = () => {
         </div>
 
         {/* Scrollable Messages Stream with Welcome Hero at Top */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4 flex flex-col justify-start">
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-3 md:px-6 py-4 space-y-3 flex flex-col justify-start">
           {/* ──────── HERO WELCOME HEADER ──────── */}
-          <div className="text-center py-8 px-4 mb-3 flex flex-col items-center justify-center animate-fade-in shrink-0">
+          <div className="text-center py-6 px-4 mb-2 flex flex-col items-center justify-center animate-fade-in shrink-0">
             {/* Glowing Rounded Hash/Bot Emblem with Sparkle Badge */}
             <div className="relative mb-4 animate-scale-up">
               <div className="w-20 h-20 rounded-3xl bg-[#0B101D] border-2 border-cyan-400 shadow-2xl shadow-cyan-500/25 flex items-center justify-center">
@@ -349,8 +349,8 @@ export const ChatArea: React.FC = () => {
           )}
         </div>
 
-        {/* Input Bar */}
-        <div className="px-6 pb-6 pt-2 shrink-0 relative bg-[#080B11]">
+        {/* Input Bar - sticks to bottom, extra padding on mobile for bottom nav */}
+        <div className="px-3 md:px-6 pb-2 md:pb-4 pt-2 shrink-0 relative bg-[#080B11]">
           {/* Emoji Picker Popover */}
           <EmojiPicker 
             isOpen={isEmojiPickerOpen} 

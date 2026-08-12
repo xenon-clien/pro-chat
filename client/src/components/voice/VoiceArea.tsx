@@ -221,28 +221,28 @@ export const VoiceArea: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col bg-[#0B0E14] h-full min-w-0 overflow-hidden select-none">
-      {/* Top Header Bar */}
-      <div className="h-14 border-b border-[#181D2A] px-6 flex items-center justify-between shrink-0 bg-[#0E121B]">
+      {/* Top Header Bar - compact on mobile */}
+      <div className="h-12 md:h-14 border-b border-[#181D2A] px-3 md:px-6 flex items-center justify-between shrink-0 bg-[#0E121B]">
         {/* Left: Channel Name & Dynamic Connected Count */}
-        <div className="flex items-center space-x-3">
-          <Volume2 size={20} className="text-cyan-400 shrink-0" />
-          <span className="text-white font-black text-base tracking-tight">{activeChannel?.name || 'General Voice'}</span>
-          <div className="flex items-center px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-emerald-400 text-xs font-bold shadow-sm">
-            <span>{connectedList.length} Connected</span>
+        <div className="flex items-center space-x-2">
+          <Volume2 size={18} className="text-cyan-400 shrink-0" />
+          <span className="text-white font-black text-sm md:text-base tracking-tight">{activeChannel?.name || 'General Voice'}</span>
+          <div className="flex items-center px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-emerald-400 text-xs font-bold">
+            <span>{connectedList.length} Live</span>
           </div>
         </div>
 
         {/* Right: Target Quality Badge & Live Indicator */}
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2">
           {isAnyScreenSharing && (
-            <div className="flex items-center space-x-1.5 px-3 py-1 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-400 text-xs font-black shadow-lg">
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-              <span>LIVE STREAM</span>
+            <div className="flex items-center space-x-1 px-2 py-0.5 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-400 text-xs font-black">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+              <span>LIVE</span>
             </div>
           )}
-          <div className="flex items-center space-x-1.5 px-3.5 py-1 bg-[#131826] border border-cyan-500/30 rounded-xl text-cyan-400 text-xs font-black shadow-lg shadow-cyan-500/10">
-            <Zap size={14} className="fill-cyan-400 text-cyan-400" />
-            <span>{streamQuality.res} @ {streamQuality.fps}fps Target</span>
+          <div className="hidden sm:flex items-center space-x-1 px-2.5 py-1 bg-[#131826] border border-cyan-500/30 rounded-xl text-cyan-400 text-xs font-black">
+            <Zap size={12} className="fill-cyan-400 text-cyan-400" />
+            <span>{streamQuality.res} @ {streamQuality.fps}fps</span>
           </div>
         </div>
       </div>
@@ -354,14 +354,14 @@ export const VoiceArea: React.FC = () => {
         ) : (
           /* ──────── VOICE CHARACTER CARDS GRID ──────── */
           <div className={clsx(
-            "w-full max-w-5xl grid gap-6 place-items-stretch",
-            connectedList.length === 1 ? "grid-cols-1 max-w-md" : connectedList.length === 2 ? "grid-cols-1 md:grid-cols-2 max-w-3xl" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+            "w-full max-w-5xl grid gap-3 md:gap-6 place-items-stretch",
+            connectedList.length === 1 ? "grid-cols-1 max-w-sm" : connectedList.length === 2 ? "grid-cols-2 max-w-3xl" : "grid-cols-2 lg:grid-cols-3"
           )}>
             {connectedList.map((member) => (
               <div
                 key={member.id}
                 className={clsx(
-                  "h-64 bg-[#111522] rounded-3xl border p-6 flex flex-col items-center justify-between relative shadow-xl transition-all duration-300 group animate-scale-up",
+                  "h-40 md:h-64 bg-[#111522] rounded-2xl md:rounded-3xl border p-3 md:p-6 flex flex-col items-center justify-between relative shadow-xl transition-all duration-300 group animate-scale-up",
                   member.isSpeaking
                     ? "border-cyan-400/80 ring-2 ring-cyan-400/30 shadow-cyan-500/10 scale-[1.01]"
                     : "border-[#1D2538] hover:border-pink-400/40"
@@ -389,7 +389,7 @@ export const VoiceArea: React.FC = () => {
                     src={member.avatarUrl}
                     alt={member.name}
                     className={clsx(
-                      "w-28 h-28 rounded-3xl object-cover transition-all duration-300 shadow-2xl relative z-10 border-2",
+                      "w-16 h-16 md:w-28 md:h-28 rounded-2xl md:rounded-3xl object-cover transition-all duration-300 shadow-2xl relative z-10 border-2",
                       member.isSpeaking 
                         ? "border-cyan-400 scale-105 ring-4 ring-cyan-400/20 animate-bounce-subtle" 
                         : "border-white/10"

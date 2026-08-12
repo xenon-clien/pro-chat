@@ -16,19 +16,15 @@ export const MainLayout: React.FC = () => {
   const { fetchServers, isLoading, servers, activeServerId, activeChannelId, joinServerByCode } = useServerStore();
   const [joinedToast, setJoinedToast] = useState<string | null>(null);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   const [isMobileMemberListOpen, setIsMobileMemberListOpen] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     fetchServers();
 
-    // Auto-detect invite code from URL query params (e.g. ?join=PRO-HD or ?invite=PRO-HD)
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const inviteCode = params.get('join') || params.get('invite');
-      
-      // Also check pathname /invite/<code>
       const pathMatch = window.location.pathname.match(/\/invite\/([A-Za-z0-9_-]+)/);
       const targetCode = inviteCode || (pathMatch ? pathMatch[1] : null);
 
@@ -36,7 +32,6 @@ export const MainLayout: React.FC = () => {
         joinServerByCode(targetCode).then((joined) => {
           setJoinedToast(`Joined ${joined.name || targetCode} successfully! 🎉`);
           setTimeout(() => setJoinedToast(null), 4000);
-          // Clean URL
           window.history.replaceState({}, '', '/');
         }).catch(err => {
           console.warn('Invite auto-join failed:', err);
@@ -68,54 +63,62 @@ export const MainLayout: React.FC = () => {
       {/* Native App Launch Splash Screen */}
       {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
 
-      <div className="flex flex-col h-screen w-full overflow-hidden bg-[#080A0F] select-none relative">
-        {/* Discord Top Window Title Bar with Mobile Drawer Controls */}
-        <DiscordTitleBar 
-          notificationCount="9+" 
-          onToggleMobileMenu={() => setIsMobileDrawerOpen(prev => !prev)}
-          onToggleMemberList={() => setIsMobileMemberListOpen(prev => !prev)}
-        />
+      {/*
+        ╔═══════════════════════════════════════╗
+        ║  DESKTOP LAYOUT (md and above)        ║
+        ║  Top TitleBar → Main row → no bottom  ║
+        ╠═══════════════════════════════════════╣
+        ║  MOBILE LAYOUT (below md)             ║
+        ║  No TitleBar → Content → Bottom Nav   ║
+        ╚═══════════════════════════════════════╝
+      */}
+      <div className="flex flex-col h-[100dvh] w-full overflow-hidden bg-[#080A0F] select-none">
 
-        {/* Auto-Join Toast Notification */}
-        {joinedToast && (
-          <div className="fixed top-12 left-1/2 -translate-x-1/2 z-[200] px-5 py-3 bg-emerald-500 text-black font-black text-xs rounded-2xl shadow-2xl flex items-center space-x-2 animate-scale-up border-2 border-emerald-300">
-            <CheckCircle2 size={18} className="stroke-[2.5]" />
-            <span>{joinedToast}</span>
-          </div>
-        )}
+        {/* ─── Desktop Only: TitleBar (hidden on mobile) ─── */}
+        <div className="hidden md:block shrink-0">
+          <DiscordTitleBar
+            notificationCount="9+"
+            onToggleMobileMenu={() => setIsMobileDrawerOpen(prev => !prev)}
+            onToggleMemberList={() => setIsMobileMemberListOpen(prev => !prev)}
+          />
+        </div>
 
-        {/* Main Workspace Layout */}
-        <div className="flex flex-1 w-full overflow-hidden bg-[#0B0E14] relative">
-          
-          {/* ─── Mobile Left Drawer Backdrop ─── */}
+        {/* ─── Main Workspace (fills remaining space) ─── */}
+        <div className="flex flex-1 min-h-0 w-full overflow-hidden relative">
+
+          {/* Backdrop: closes drawer when tapping outside */}
           {isMobileDrawerOpen && (
-            <div 
-              className="md:hidden fixed inset-0 z-[55] bg-black/75 backdrop-blur-sm"
+            <div
+              className="md:hidden fixed inset-0 z-[55] bg-black/80 backdrop-blur-sm"
               onClick={() => setIsMobileDrawerOpen(false)}
             />
           )}
 
-          {/* ─── Desktop & Mobile Left Sidebar Container ─── */}
+          {/* ─── Left Sidebar Panel ─────────────────────────
+              Desktop: always visible inline (static)
+              Mobile:  fixed overlay, slides in from left
+          ─────────────────────────────────────────────── */}
           <div className={clsx(
-            "flex h-full shrink-0 z-[60] transition-transform duration-300 ease-in-out",
-            // Desktop: always visible inline
-            "md:translate-x-0 md:static md:top-0 md:bottom-0",
-            // Mobile: absolutely off-screen left, slides in as overlay
-            "fixed top-9 bottom-14 left-0",
-            isMobileDrawerOpen ? "translate-x-0 shadow-[4px_0_40px_rgba(0,0,0,0.8)]" : "-translate-x-full"
+            // Shared
+            'flex shrink-0 h-full z-[60] transition-transform duration-300 ease-in-out',
+            // Desktop: part of the normal document flow
+            'md:relative md:translate-x-0',
+            // Mobile: fixed overlay
+            'fixed inset-y-0 left-0',
+            isMobileDrawerOpen ? 'translate-x-0 shadow-[6px_0_50px_rgba(0,0,0,0.9)]' : '-translate-x-full',
           )}>
             <ServerSidebar />
             <ChannelSidebar />
           </div>
 
-          {/* ─── Center: Main Content (Friends / Voice / Chat) ─── */}
-          <div className="flex-1 flex h-full min-w-0 overflow-hidden relative">
+          {/* ─── Center: Main Content fills full screen on mobile ─── */}
+          <div className="flex-1 flex h-full min-w-0 overflow-hidden">
             {isHome ? (
               <FriendsView />
             ) : activeChannel?.type === 'VOICE' ? (
-              <div className="flex flex-1 h-full min-w-0 overflow-hidden relative">
+              <div className="flex flex-1 h-full min-w-0 overflow-hidden">
                 <VoiceArea />
-                {/* Desktop MemberList */}
+                {/* Desktop-only right member list */}
                 <div className="hidden lg:block h-full shrink-0">
                   <MemberList serverId={activeServer?.id || 'pro-chat-hq'} />
                 </div>
@@ -128,14 +131,14 @@ export const MainLayout: React.FC = () => {
           {/* ─── Mobile Right MemberList Drawer ─── */}
           {isMobileMemberListOpen && (
             <>
-              <div 
+              <div
                 className="md:hidden fixed inset-0 z-[55] bg-black/70 backdrop-blur-sm"
                 onClick={() => setIsMobileMemberListOpen(false)}
               />
-              <div className="md:hidden fixed top-9 bottom-14 right-0 z-[60] w-72 bg-[#080A0F] shadow-2xl animate-scale-up border-l border-white/10 flex flex-col">
-                <div className="h-10 px-4 border-b border-white/10 flex items-center justify-between text-xs font-bold text-gray-300">
+              <div className="md:hidden fixed top-0 bottom-0 right-0 z-[60] w-72 bg-[#080A0F] shadow-2xl border-l border-white/10 flex flex-col">
+                <div className="h-12 px-4 border-b border-white/10 flex items-center justify-between text-xs font-bold text-gray-300 shrink-0">
                   <span>Server Members</span>
-                  <button 
+                  <button
                     onClick={() => setIsMobileMemberListOpen(false)}
                     className="p-1 rounded-lg hover:bg-white/10 text-gray-400"
                   >
@@ -150,12 +153,20 @@ export const MainLayout: React.FC = () => {
           )}
         </div>
 
-        {/* ─── Mobile Bottom Navigation Bar (Discord Mobile App Style) ─── */}
-        <MobileNavBar 
+        {/* ─── Mobile Bottom Navigation Bar ─── */}
+        <MobileNavBar
           onToggleDrawer={() => setIsMobileDrawerOpen(prev => !prev)}
           isDrawerOpen={isMobileDrawerOpen}
         />
       </div>
+
+      {/* ─── Auto-Join Toast Notification ─── */}
+      {joinedToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] px-5 py-3 bg-emerald-500 text-black font-black text-xs rounded-2xl shadow-2xl flex items-center space-x-2 animate-scale-up border-2 border-emerald-300">
+          <CheckCircle2 size={18} className="stroke-[2.5]" />
+          <span>{joinedToast}</span>
+        </div>
+      )}
     </>
   );
 };

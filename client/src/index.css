@@ -14,10 +14,24 @@
 }
 
 @layer base {
+  /* ─── Mobile-first viewport fix ─── */
+  html, body, #root {
+    height: 100%;
+    height: 100dvh; /* dynamic viewport height - accounts for mobile browser chrome */
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
   body {
     @apply bg-[#0B0E14] text-[#E2E8F0] overflow-hidden select-none font-sans;
+    /* Prevent text size adjustment on iOS rotation */
+    -webkit-text-size-adjust: 100%;
+    /* Prevent tap highlight flash on mobile */
+    -webkit-tap-highlight-color: transparent;
   }
 }
+
 
 /* Custom Light Pink & Electric Blue Scrollbar */
 ::-webkit-scrollbar {
