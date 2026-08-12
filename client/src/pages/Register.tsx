@@ -29,7 +29,9 @@ const Register = () => {
       nitroTier: 'nitro' as const,
     };
     setAuth(fallbackUser, 'demo-token-' + Date.now());
-    navigate('/', { replace: true });
+    localStorage.removeItem('prochat_user_servers');
+    const query = typeof window !== 'undefined' ? window.location.search : '';
+    navigate('/' + query, { replace: true });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

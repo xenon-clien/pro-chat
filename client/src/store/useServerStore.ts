@@ -56,31 +56,7 @@ export const OFFICIAL_PROCHAT_SERVER: Server = {
   ]
 };
 
-const INITIAL_PUBLIC_SERVERS: Server[] = [
-  OFFICIAL_PROCHAT_SERVER,
-  {
-    id: 'srv-gaming-hub',
-    name: 'Gaming Hub Guild',
-    iconUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=GamingHub',
-    inviteCode: 'GAME-7799',
-    channels: [
-      { id: 'ch-gen-game', name: 'general', type: 'TEXT', serverId: 'srv-gaming-hub' },
-      { id: 'ch-ai-game', name: '🤖-gaming-bot', type: 'TEXT', serverId: 'srv-gaming-hub' },
-      { id: 'ch-voice-game', name: 'Squad Voice', type: 'VOICE', serverId: 'srv-gaming-hub' },
-    ]
-  },
-  {
-    id: 'srv-anime-realm',
-    name: 'Anime & Manga Lounge',
-    iconUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=AnimeRealm',
-    inviteCode: 'ANIME-101',
-    channels: [
-      { id: 'ch-gen-anime', name: 'general', type: 'TEXT', serverId: 'srv-anime-realm' },
-      { id: 'ch-ai-anime', name: '🤖-sam-assistant', type: 'TEXT', serverId: 'srv-anime-realm' },
-      { id: 'ch-voice-anime', name: 'Watch Party', type: 'VOICE', serverId: 'srv-anime-realm' },
-    ]
-  }
-];
+const INITIAL_PUBLIC_SERVERS: Server[] = [OFFICIAL_PROCHAT_SERVER];
 
 function getCleanServers(): Server[] {
   try {
@@ -98,13 +74,24 @@ function getCleanServers(): Server[] {
     const seen = new Set<string>();
     const cleanList: Server[] = [];
 
-    // Ensure official Pro Chat HQ is included
+    // Ensure official Pro Chat HQ is ALWAYS first and only default
     cleanList.push(OFFICIAL_PROCHAT_SERVER);
     seen.add(OFFICIAL_PROCHAT_SERVER.id);
+    seen.add('pro-chat-hq');
 
     for (const s of parsed) {
       if (!s || !s.id) continue;
       const key = s.id.toLowerCase();
+      // Remove all legacy mock/dummy clutter
+      if (
+        key === 'gaming-zone' || 
+        key === 'anime-lounge' || 
+        key === 'srv-gaming-hub' || 
+        key === 'srv-anime-realm' || 
+        key.startsWith('joined-pro-') ||
+        key === 'pro-chat-hq'
+      ) continue;
+
       if (!seen.has(key)) {
         seen.add(key);
         if (!s.channels || s.channels.length === 0) {
@@ -117,6 +104,7 @@ function getCleanServers(): Server[] {
       }
     }
 
+    localStorage.setItem('prochat_user_servers', JSON.stringify(cleanList));
     return cleanList;
   } catch {
     return [OFFICIAL_PROCHAT_SERVER];

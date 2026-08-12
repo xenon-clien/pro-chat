@@ -30,6 +30,7 @@ const Login = () => {
       nitroTier: 'nitro' as const,
     };
     setAuth(fallbackUser, 'demo-token-' + Date.now());
+    localStorage.removeItem('prochat_user_servers');
     const query = typeof window !== 'undefined' ? window.location.search : '';
     navigate('/' + query, { replace: true });
   };

@@ -98,6 +98,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       localStorage.removeItem('nitro_status');
+      localStorage.removeItem('prochat_user_servers');
       set({ user: null, token: null, isAuthenticated: false });
     },
   };
