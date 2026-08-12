@@ -74,13 +74,16 @@ export const VoiceArea: React.FC = () => {
     ? localScreenStream 
     : (activeScreenPeer?.remoteStream || null);
 
-  // Bind screen stream to video element whenever active stream changes
+  // Bind screen stream to video element only when stream object reference actually changes
   useEffect(() => {
-    if (screenVideoRef.current && currentScreenStream) {
-      screenVideoRef.current.srcObject = currentScreenStream;
-      screenVideoRef.current.play().catch(e => console.warn('[Screen Video] Play warning:', e));
+    const vid = screenVideoRef.current;
+    if (vid && currentScreenStream) {
+      if (vid.srcObject !== currentScreenStream) {
+        vid.srcObject = currentScreenStream;
+      }
+      vid.play().catch(() => {});
     }
-  }, [currentScreenStream, isAnyScreenSharing]);
+  }, [currentScreenStream]);
 
   // Camera handling
   useEffect(() => {
@@ -261,13 +264,7 @@ export const VoiceArea: React.FC = () => {
           >
             {/* Screen Video Stream (Plays local or remote live feed) */}
             <video 
-              ref={(el) => {
-                screenVideoRef.current = el;
-                if (el && currentScreenStream) {
-                  el.srcObject = currentScreenStream;
-                  el.play().catch(() => {});
-                }
-              }}
+              ref={screenVideoRef}
               autoPlay 
               playsInline 
               muted 
