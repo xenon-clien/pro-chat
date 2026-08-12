@@ -104,18 +104,12 @@ export const MainLayout: React.FC = () => {
             <div className="flex flex-1 h-full min-w-0 overflow-hidden relative">
               <VoiceArea />
               {/* Desktop MemberList */}
-              <div className="hidden md:block h-full">
+              <div className="hidden lg:block h-full shrink-0">
                 <MemberList serverId={activeServer?.id || 'pro-chat-hq'} />
               </div>
             </div>
           ) : (
-            <div className="flex flex-1 h-full min-w-0 overflow-hidden relative">
-              <ChatArea />
-              {/* Desktop MemberList */}
-              <div className="hidden md:block h-full">
-                <MemberList serverId={activeServer?.id || 'pro-chat-hq'} />
-              </div>
-            </div>
+            <ChatArea />
           )}
         </div>
 
