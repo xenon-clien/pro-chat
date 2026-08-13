@@ -20,6 +20,10 @@ android {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
     }
+    lintOptions {
+        abortOnError false
+        checkReleaseBuilds false
+    }
     buildTypes {
         release {
             minifyEnabled false

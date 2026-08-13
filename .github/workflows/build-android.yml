@@ -31,36 +31,39 @@ jobs:
         with:
           node-version: 22
 
-      # ─── 4. Configure Android SDK & Licenses ─────────────
-      - name: Configure Android SDK
-        run: |
-          echo "sdk.dir=$ANDROID_HOME" > client/android/local.properties
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0" || true
+      # ─── 4. Setup Android SDK 35 ─────────────────────────
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0'
 
-      # ─── 5. Install Client Dependencies ──────────────────
+      # ─── 5. Configure local.properties ───────────────────
+      - name: Configure local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > client/android/local.properties
+
+      # ─── 6. Install Client Dependencies ──────────────────
       - name: Install Client Dependencies
         working-directory: client
         run: npm install
 
-      # ─── 6. Build Web App ────────────────────────────────
+      # ─── 7. Build Web App ────────────────────────────────
       - name: Build Web App
         working-directory: client
         run: npm run build
 
-      # ─── 7. Capacitor Sync Android ───────────────────────
+      # ─── 8. Capacitor Sync Android ───────────────────────
       - name: Capacitor Sync Android
         working-directory: client
         run: npx cap sync android
 
-      # ─── 8. Build Debug APK with Gradle ──────────────────
+      # ─── 9. Build Debug APK with Gradle ──────────────────
       - name: Build Debug APK with Gradle
         working-directory: client/android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug --no-daemon
 
-      # ─── 9. Upload APK Artifact ──────────────────────────
+      # ─── 10. Upload APK Artifact ─────────────────────────
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -68,7 +71,7 @@ jobs:
           path: client/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      # ─── 10. Create GitHub Release ───────────────────────
+      # ─── 11. Create GitHub Release ───────────────────────
       - name: Create Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
