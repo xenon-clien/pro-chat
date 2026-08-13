@@ -1,0 +1,100 @@
+name: Build ProChat Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:   # Also allow manual trigger from GitHub Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # ─── 1. Checkout code ──────────────────────────────────
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # ─── 2. Setup Node.js ─────────────────────────────────
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      # ─── 3. Install client dependencies ───────────────────
+      - name: Install Client Dependencies
+        working-directory: client
+        run: npm ci
+
+      # ─── 4. Build the web app (Vite) ──────────────────────
+      - name: Build Web App
+        working-directory: client
+        run: npm run build
+
+      # ─── 5. Setup Java (required for Android build) ───────
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # ─── 6. Setup Android SDK ─────────────────────────────
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # ─── 7. Accept Android SDK licenses ───────────────────
+      - name: Accept Android SDK Licenses
+        run: yes | sdkmanager --licenses || true
+
+      # ─── 8. Capacitor sync (copies dist/ into Android) ────
+      - name: Capacitor Sync Android
+        working-directory: client
+        run: npx cap sync android
+
+      # ─── 9. Make Gradle executable ────────────────────────
+      - name: Grant Gradle Execute Permission
+        working-directory: client/android
+        run: chmod +x gradlew
+
+      # ─── 10. Build Debug APK (no signing needed) ──────────
+      - name: Build Debug APK
+        working-directory: client/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      # ─── 11. Upload APK as artifact ───────────────────────
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProChat-Android-APK
+          path: client/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      # ─── 12. Create GitHub Release with APK ───────────────
+      - name: Create Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: ProChat Android v${{ github.run_number }}
+          body: |
+            ## 📱 ProChat Native Android App
+            
+            ### Installation
+            1. Download `ProChat-Android.apk` below
+            2. On your Android phone: Settings → Security → Enable "Unknown Sources" (or "Install Unknown Apps")
+            3. Open the downloaded APK and tap Install
+            4. Done! ProChat is now installed as a native app 🎉
+            
+            ### What's New in v${{ github.run_number }}
+            - Latest code from main branch
+            - Auto-built from GitHub Actions
+          files: client/android/app/build/outputs/apk/debug/app-debug.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
