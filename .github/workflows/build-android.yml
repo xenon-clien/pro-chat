@@ -25,35 +25,41 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # ─── 3. Setup Node.js ────────────────────────────────
+      # ─── 3. Setup Node.js 22 ─────────────────────────────
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      # ─── 4. Install Client Dependencies ──────────────────
+      # ─── 4. Configure Android SDK & Licenses ─────────────
+      - name: Configure Android SDK
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > client/android/local.properties
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      # ─── 5. Install Client Dependencies ──────────────────
       - name: Install Client Dependencies
         working-directory: client
         run: npm install
 
-      # ─── 5. Build Web App with Vite ──────────────────────
+      # ─── 6. Build Web App ────────────────────────────────
       - name: Build Web App
         working-directory: client
         run: npm run build
 
-      # ─── 6. Capacitor Sync Android ───────────────────────
+      # ─── 7. Capacitor Sync Android ───────────────────────
       - name: Capacitor Sync Android
         working-directory: client
         run: npx cap sync android
 
-      # ─── 7. Build Debug APK with Gradle ──────────────────
+      # ─── 8. Build Debug APK with Gradle ──────────────────
       - name: Build Debug APK with Gradle
         working-directory: client/android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
-      # ─── 8. Upload APK Artifact ──────────────────────────
+      # ─── 9. Upload APK Artifact ──────────────────────────
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -61,7 +67,7 @@ jobs:
           path: client/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      # ─── 9. Create GitHub Release ────────────────────────
+      # ─── 10. Create GitHub Release ───────────────────────
       - name: Create Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
