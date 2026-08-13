@@ -57,7 +57,7 @@ jobs:
         working-directory: client/android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug --stacktrace --info
 
       # ─── 9. Upload APK Artifact ──────────────────────────
       - name: Upload APK Artifact
