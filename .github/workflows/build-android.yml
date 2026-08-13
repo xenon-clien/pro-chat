@@ -36,6 +36,7 @@ jobs:
         run: |
           echo "sdk.dir=$ANDROID_HOME" > client/android/local.properties
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0" || true
 
       # ─── 5. Install Client Dependencies ──────────────────
       - name: Install Client Dependencies
