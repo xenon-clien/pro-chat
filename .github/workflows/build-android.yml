@@ -18,46 +18,42 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # ─── 2. Setup Java 21 (Temurin JDK) ──────────────────
-      - name: Setup Java 21
+      # ─── 2. Setup Java 17 ────────────────────────────────
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '17'
 
-      # ─── 3. Setup Android SDK with SDK 35 ────────────────
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'platforms;android-35 build-tools;35.0.0'
-
-      # ─── 4. Setup Node.js ────────────────────────────────
+      # ─── 3. Setup Node.js ────────────────────────────────
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # ─── 5. Install Client Dependencies ──────────────────
+      # ─── 4. Install Client Dependencies ──────────────────
       - name: Install Client Dependencies
         working-directory: client
         run: npm install
 
-      # ─── 6. Build Web App with Vite ──────────────────────
+      # ─── 5. Build Web App with Vite ──────────────────────
       - name: Build Web App
         working-directory: client
         run: npm run build
 
-      # ─── 7. Capacitor Sync Android ───────────────────────
+      # ─── 6. Capacitor Sync Android ───────────────────────
       - name: Capacitor Sync Android
         working-directory: client
         run: npx cap sync android
 
-      # ─── 8. Build Debug APK with Gradle ──────────────────
+      # ─── 7. Build Debug APK with Gradle ──────────────────
       - name: Build Debug APK with Gradle
         working-directory: client/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
 
-      # ─── 9. Upload APK Artifact ──────────────────────────
+      # ─── 8. Upload APK Artifact ──────────────────────────
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -65,7 +61,7 @@ jobs:
           path: client/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      # ─── 10. Create GitHub Release ───────────────────────
+      # ─── 9. Create GitHub Release ────────────────────────
       - name: Create Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
