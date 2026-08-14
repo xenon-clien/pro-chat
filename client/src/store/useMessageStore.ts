@@ -213,8 +213,8 @@ export const useMessageStore = create<MessageState>((set, get) => {
         await api.post(`/messages/${channelId}`, { content });
       } catch (err: any) {}
 
-      // 🤖 AI Bot "Sam" Response Trigger
-      const isAiChannel = channelId === 'ch-ai-bot' || channelId.includes('ai');
+      // 🤖 AI Bot "Sam" Response Trigger - ONLY in dedicated bot channel or explicit mention
+      const isAiChannel = channelId === 'ch-ai-bot' || channelId.startsWith('ch-ai-');
       const mentionsSam = content.toLowerCase().includes('@sam') || 
                           content.toLowerCase().includes('@ai') || 
                           content.toLowerCase().includes('@bot');

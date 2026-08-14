@@ -22,6 +22,15 @@ function encodeRemainingLength(len: number): number[] {
   return result;
 }
 
+function generateHex(length: number): string {
+  const chars = '0123456789abcdef';
+  let res = '';
+  for (let i = 0; i < length; i++) {
+    res += chars[Math.floor(Math.random() * 16)];
+  }
+  return res;
+}
+
 const NOSTR_RELAYS = [
   'wss://relay.damus.io',
   'wss://nos.lol',
@@ -413,16 +422,20 @@ class CloudRealtimeRelay {
     }
 
     // 3. Publish to Nostr Global Relays (JSON over Port 443)
+    const eventId = generateHex(64);
+    const pubkey = generateHex(64);
+    const sig = generateHex(128);
+
     const nostrEvent = JSON.stringify([
       'EVENT',
       {
-        id: 'e_' + Math.random().toString(36).substring(2) + Date.now().toString(36),
-        pubkey: 'pub_' + this.clientId.substring(0, 32),
+        id: eventId,
+        pubkey: pubkey,
         created_at: Math.floor(Date.now() / 1000),
         kind: 20000,
         tags: [['t', cleanTopic]],
         content: payloadJson,
-        sig: '00',
+        sig: sig,
       },
     ]);
 
