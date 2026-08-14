@@ -82,7 +82,7 @@ function getCleanServers(): Server[] {
     for (const s of parsed) {
       if (!s || !s.id) continue;
       const key = s.id.toLowerCase();
-      // Remove all legacy mock/dummy clutter
+      // Remove legacy dummy clutter
       if (
         key === 'gaming-zone' || 
         key === 'anime-lounge' || 
@@ -94,12 +94,17 @@ function getCleanServers(): Server[] {
 
       if (!seen.has(key)) {
         seen.add(key);
-        if (!s.channels || s.channels.length === 0) {
-          s.channels = [
-            { id: 'ch-gen-' + s.id, name: 'general', type: 'TEXT', serverId: s.id },
-            { id: 'ch-voice-' + s.id, name: 'General Voice', type: 'VOICE', serverId: s.id },
-          ];
-        }
+        // Normalize server and channel IDs based on code
+        const code = (s.inviteCode || s.id).toUpperCase().replace(/[^A-Z0-9]/g, '-').replace(/^SRV-/, '');
+        const codeLow = code.toLowerCase();
+        const serverId = 'srv-' + codeLow;
+        s.id = serverId;
+        s.inviteCode = code;
+        s.channels = [
+          { id: 'ch-gen-' + codeLow, name: 'general', type: 'TEXT', serverId },
+          { id: 'ch-ai-' + codeLow, name: '🤖-sam-ai', type: 'TEXT', serverId },
+          { id: 'ch-voice-' + codeLow, name: 'General Voice', type: 'VOICE', serverId },
+        ];
         cleanList.push(s);
       }
     }

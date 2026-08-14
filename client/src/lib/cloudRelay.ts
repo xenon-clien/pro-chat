@@ -1,7 +1,7 @@
 /**
  * ProChat Robust Multi-Broker Cloud Relay & Global Real-Time Mesh
- * Concurrently bridges multiple public MQTT WebSocket brokers (EMQX, HiveMQ, Mosquitto)
- * + HTML5 BroadcastChannel for 0ms cross-tab and 100% resilient cross-laptop synchronization.
+ * Concurrently bridges 4 public MQTT WebSocket brokers
+ * + HTML5 BroadcastChannel + Offline Queue for 100% resilient cross-laptop synchronization.
  */
 
 type MessageHandler = (topic: string, data: any) => void;
@@ -31,6 +31,7 @@ class CloudRealtimeRelay {
   private pingInterval: any = null;
   private broadcastChannel: BroadcastChannel | null = null;
   private seenMsgIds = new Set<string>();
+  private pendingQueue: Array<{ topic: string; data: any }> = [];
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -81,7 +82,7 @@ class CloudRealtimeRelay {
       };
 
       ws.onerror = () => {
-        ws.close();
+        try { ws.close(); } catch (e) {}
       };
     } catch (e) {
       setTimeout(() => this.connectBroker(url), 4000);
@@ -137,6 +138,13 @@ class CloudRealtimeRelay {
         this.subscribers.forEach((_, topic) => {
           this.sendSubscribePacket(ws, topic);
         });
+
+        // Flush any queued messages
+        if (this.pendingQueue.length > 0) {
+          const queue = [...this.pendingQueue];
+          this.pendingQueue = [];
+          queue.forEach(({ topic, data }) => this.publish(topic, data));
+        }
       }
       // PUBLISH (Type 3)
       else if (packetType === 3) {
@@ -250,7 +258,7 @@ class CloudRealtimeRelay {
     const msgId = 'msg_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
     const payloadWithMeta = { ...data, _senderId: this.clientId, _msgId: msgId };
 
-    // 1. Broadcast locally
+    // 1. Broadcast locally for instant cross-tab sync
     if (this.broadcastChannel) {
       try {
         this.broadcastChannel.postMessage({
@@ -260,6 +268,14 @@ class CloudRealtimeRelay {
           msgId,
         });
       } catch (e) {}
+    }
+
+    // If no sockets are currently connected, queue for when connection is ready
+    if (this.sockets.length === 0) {
+      if (this.pendingQueue.length < 50) {
+        this.pendingQueue.push({ topic, data });
+      }
+      return;
     }
 
     // 2. Publish to all active cloud sockets
@@ -275,7 +291,9 @@ class CloudRealtimeRelay {
 
     this.sockets.forEach((ws) => {
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(packet.buffer);
+        try {
+          ws.send(packet.buffer);
+        } catch (e) {}
       }
     });
   }
