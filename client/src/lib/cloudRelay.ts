@@ -7,6 +7,8 @@
  * 3. HTML5 BroadcastChannel (0ms local cross-tab sync)
  */
 
+import socketService from './socket';
+
 type MessageHandler = (topic: string, data: any) => void;
 
 function encodeRemainingLength(len: number): number[] {
@@ -48,6 +50,15 @@ class CloudRealtimeRelay {
       this.initNostrRelays();
       this.initMqttBrokers();
       this.startHeartbeat();
+
+      // Listen for incoming messages from Railway Socket.io backend
+      try {
+        socketService.onNewMessage((msg) => {
+          if (msg && msg.topic) {
+            this.dispatchMessage(msg.topic, msg.data || msg);
+          }
+        });
+      } catch (e) {}
     }
   }
 
@@ -340,6 +351,11 @@ class CloudRealtimeRelay {
     }
     this.subscribers.get(norm)!.add(handler);
 
+    // Join room on Railway Socket.io backend
+    try {
+      socketService.joinRoom(norm);
+    } catch (e) {}
+
     // Send to Nostr Relays
     this.nostrSockets.forEach((ws) => {
       this.sendNostrSubscribe(ws, topic);
@@ -356,6 +372,9 @@ class CloudRealtimeRelay {
         set.delete(handler);
         if (set.size === 0) {
           this.subscribers.delete(norm);
+          try {
+            socketService.leaveRoom(norm);
+          } catch (e) {}
         }
       }
     };
@@ -379,6 +398,11 @@ class CloudRealtimeRelay {
       } catch (e) {}
     }
 
+    // 2. Emit over Railway Socket.io backend
+    try {
+      socketService.emitMessage(cleanTopic, { topic: cleanTopic, data: payloadWithMeta });
+    } catch (e) {}
+
     const hasActiveSockets = this.nostrSockets.some(s => s.readyState === WebSocket.OPEN) ||
                              this.mqttSockets.some(s => s.readyState === WebSocket.OPEN);
 
@@ -388,7 +412,7 @@ class CloudRealtimeRelay {
       }
     }
 
-    // 2. Publish to Nostr Global Relays (JSON over Port 443)
+    // 3. Publish to Nostr Global Relays (JSON over Port 443)
     const nostrEvent = JSON.stringify([
       'EVENT',
       {
@@ -410,7 +434,7 @@ class CloudRealtimeRelay {
       }
     });
 
-    // 3. Publish to MQTT Brokers (Binary frame)
+    // 4. Publish to MQTT Brokers (Binary frame)
     const topicBytes = new TextEncoder().encode(cleanTopic);
     const topicLen = [Math.floor(topicBytes.length / 256), topicBytes.length % 256];
     const payloadBytes = new TextEncoder().encode(payloadJson);

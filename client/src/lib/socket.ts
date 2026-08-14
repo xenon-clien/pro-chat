@@ -16,7 +16,11 @@ class SocketService {
     if (this.socket && this.socket.connected) return this.socket;
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+    const PROD_SOCKET_URL = 'https://wanzxplays-production.up.railway.app';
+    const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 
+      (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? 'http://localhost:5000'
+        : PROD_SOCKET_URL);
 
     try {
       this.socket = io(backendUrl, {

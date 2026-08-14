@@ -1,13 +1,12 @@
 import axios from 'axios';
 
-const isCloudWithoutBackend = 
-  typeof window !== 'undefined' && 
-  window.location.hostname !== 'localhost' && 
-  window.location.hostname !== '127.0.0.1' && 
-  !import.meta.env.VITE_API_URL;
+const PROD_BACKEND_URL = 'https://wanzxplays-production.up.railway.app';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || (isCloudWithoutBackend ? '/api' : 'http://localhost:5000/api'),
+  baseURL: import.meta.env.VITE_API_URL || 
+    (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'http://localhost:5000/api'
+      : `${PROD_BACKEND_URL}/api`),
   withCredentials: true,
 });
 
@@ -24,8 +23,8 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // If running in cloud demo mode without a live backend URL, provide instant mock responses
-    if (isCloudWithoutBackend || error.message === 'Network Error' || !error.response) {
+    // If network error occurs or backend is unreachable, provide fallback response
+    if (error.message === 'Network Error' || !error.response) {
       const url = error.config?.url || '';
       const method = error.config?.method?.toLowerCase() || 'get';
       const data = error.config?.data ? (typeof error.config.data === 'string' ? JSON.parse(error.config.data) : error.config.data) : {};
