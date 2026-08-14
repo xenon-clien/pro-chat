@@ -8,6 +8,7 @@ const api = axios.create({
       ? 'http://localhost:5000/api'
       : `${PROD_BACKEND_URL}/api`),
   withCredentials: true,
+  timeout: 4000,
 });
 
 // Request interceptor to add the auth token to headers

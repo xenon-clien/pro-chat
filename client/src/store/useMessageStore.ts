@@ -129,7 +129,7 @@ export const useMessageStore = create<MessageState>((set, get) => {
     },
 
     fetchMessages: async (channelId: string) => {
-      set({ isLoading: true, error: null, activeChannelId: channelId });
+      set({ isLoading: false, error: null, activeChannelId: channelId });
 
       if (currentUnsub) {
         currentUnsub();
@@ -148,16 +148,7 @@ export const useMessageStore = create<MessageState>((set, get) => {
         }
       });
 
-      // Try backend first
-      try {
-        const response = await api.get(`/messages/${channelId}`);
-        if (Array.isArray(response.data) && response.data.length > 0) {
-          set({ messages: response.data, isLoading: false });
-          return;
-        }
-      } catch (err: any) {}
-
-      // In-session seeds only (no persistent old user chat across logins)
+      // In-session seeds only (instant response)
       const seeds = SEED_MESSAGES[channelId] || [];
       const current = get().messages.filter(m => m.channelId === channelId);
       const combined = current.length > 0 ? current : seeds;
@@ -165,6 +156,13 @@ export const useMessageStore = create<MessageState>((set, get) => {
       combined.forEach((m) => uniqueMap.set(m.id, m));
 
       set({ messages: Array.from(uniqueMap.values()), isLoading: false, error: null });
+
+      // Non-blocking background sync from API
+      api.get(`/messages/${channelId}`).then((response) => {
+        if (Array.isArray(response.data) && response.data.length > 0) {
+          set({ messages: response.data, isLoading: false });
+        }
+      }).catch(() => {});
     },
 
     addMessage: (message: Message) => {
