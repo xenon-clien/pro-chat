@@ -1,14 +1,12 @@
 import axios from 'axios';
 
-const PROD_BACKEND_URL = 'https://wanzxplays-production.up.railway.app';
-
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 
     (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
       ? 'http://localhost:5000/api'
-      : `${PROD_BACKEND_URL}/api`),
+      : '/api'),
   withCredentials: true,
-  timeout: 4000,
+  timeout: 3000,
 });
 
 // Request interceptor to add the auth token to headers
