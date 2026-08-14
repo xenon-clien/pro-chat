@@ -258,18 +258,19 @@ export const CreateServerModal: React.FC<CreateServerModalProps> = ({
                         className={clsx(
                           "px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 flex items-center space-x-1 shadow-md",
                           isAlreadyJoined
-                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                            : "bg-cyan-400 hover:bg-cyan-300 text-black hover:scale-105 active:scale-95"
+                            ? "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 hover:scale-105 active:scale-95"
+                            : "bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-black hover:scale-105 active:scale-95 shadow-cyan-500/20"
                         )}
+                        title={isAlreadyJoined ? "Switch to this server" : "Join this server"}
                       >
                         {isAlreadyJoined ? (
                           <>
                             <Check size={13} className="stroke-[3]" />
-                            <span>Joined</span>
+                            <span>Switch Server</span>
                           </>
                         ) : (
                           <>
-                            <span>Join</span>
+                            <span>Join Server</span>
                             <ArrowRight size={13} />
                           </>
                         )}

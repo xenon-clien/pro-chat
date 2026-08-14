@@ -42,8 +42,9 @@ let _audioCtx: AudioContext | null = null;
 let _micAnimFrame: any = null;
 
 function buildVoiceTopic(channelId: string, serverInviteCode?: string): string {
-  const code = (serverInviteCode || channelId).toUpperCase().replace(/[^A-Z0-9]/g, '-');
-  return `prochat/v2/voice/${code}`;
+  const code = (serverInviteCode || _currentInviteCode || 'PRO-HD').toUpperCase().replace(/[^A-Z0-9]/g, '-');
+  const cleanCh = channelId.toLowerCase().replace(/[^a-z0-9]/g, '-');
+  return `prochat/v3/s/${code}/voice/${cleanCh}`;
 }
 
 export const useVoiceStore = create<VoiceState>((set, get) => ({

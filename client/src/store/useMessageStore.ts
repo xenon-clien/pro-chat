@@ -107,13 +107,11 @@ const playNotificationChime = () => {
   } catch (e) {}
 };
 
-/**
- * Returns a globally-shared MQTT topic so all users in same server share messages in real time.
- */
 function getSharedTopic(channelId: string): string {
   const inviteCode = _getActiveServerInviteCode() || 'PRO-HD';
   const cleanCode = inviteCode.toUpperCase().replace(/[^A-Z0-9]/g, '-');
-  return `prochat/v2/s/${cleanCode}/text`;
+  const cleanCh = channelId.toLowerCase().replace(/[^a-z0-9]/g, '-');
+  return `prochat/v3/s/${cleanCode}/ch/${cleanCh}`;
 }
 
 let currentUnsub: (() => void) | null = null;

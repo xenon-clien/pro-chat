@@ -20,6 +20,8 @@ function encodeRemainingLength(len: number): number[] {
 const BROKERS = [
   'wss://broker.emqx.io:8084/mqtt',
   'wss://broker.hivemq.com:8884/mqtt',
+  'wss://public.mqtthq.com:8084/mqtt',
+  'wss://test.mosquitto.org:8081/mqtt',
 ];
 
 class CloudRealtimeRelay {

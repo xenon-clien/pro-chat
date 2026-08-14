@@ -169,8 +169,8 @@ export const useServerStore = create<ServerState>((set, get) => {
 
     createServer: async (name: string) => {
       const cleanName = name.trim() || 'New Gaming Server';
-      const serverId = 'srv-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5);
       const code = cleanName.substring(0, 4).toUpperCase().replace(/[^A-Z]/g, 'PRO') + '-' + Math.floor(1000 + Math.random() * 9000);
+      const serverId = 'srv-' + code.toLowerCase().replace(/[^a-z0-9]/g, '-');
       
       const newServer: Server = {
         id: serverId,
@@ -178,9 +178,9 @@ export const useServerStore = create<ServerState>((set, get) => {
         iconUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(cleanName)}`,
         inviteCode: code,
         channels: [
-          { id: 'ch-gen-' + serverId, name: 'general', type: 'TEXT', serverId },
-          { id: 'ch-ai-' + serverId, name: '🤖-sam-ai', type: 'TEXT', serverId },
-          { id: 'ch-voice-' + serverId, name: 'General Voice', type: 'VOICE', serverId },
+          { id: 'ch-gen-' + code.toLowerCase(), name: 'general', type: 'TEXT', serverId },
+          { id: 'ch-ai-' + code.toLowerCase(), name: '🤖-sam-ai', type: 'TEXT', serverId },
+          { id: 'ch-voice-' + code.toLowerCase(), name: 'General Voice', type: 'VOICE', serverId },
         ]
       };
 
@@ -245,18 +245,12 @@ export const useServerStore = create<ServerState>((set, get) => {
         return OFFICIAL_PROCHAT_SERVER;
       }
 
-      // Check in public directory first to get canonical name & icon
-      const inDirectory = state.publicDirectory.find(
-        s => s.inviteCode?.toUpperCase() === cleanCode || 
-             s.name.toUpperCase() === cleanCode ||
-             s.id.toUpperCase() === cleanCode
-      );
-
       // Check existing user servers
       const existingInUser = state.servers.find(
         s => s.inviteCode?.toUpperCase() === cleanCode || 
              s.name.toUpperCase() === cleanCode || 
-             s.id.toUpperCase() === cleanCode
+             s.id.toUpperCase() === cleanCode ||
+             s.id.toUpperCase() === ('SRV-' + cleanCode)
       );
       if (existingInUser) {
         set({
@@ -266,7 +260,15 @@ export const useServerStore = create<ServerState>((set, get) => {
         return existingInUser;
       }
 
-      // Join new server
+      // Check in public directory first to get canonical name & icon
+      const inDirectory = state.publicDirectory.find(
+        s => s.inviteCode?.toUpperCase() === cleanCode || 
+             s.name.toUpperCase() === cleanCode ||
+             s.id.toUpperCase() === cleanCode ||
+             s.id.toUpperCase() === ('SRV-' + cleanCode)
+      );
+
+      // Join new server with canonical deterministic IDs
       const serverToJoin: Server = inDirectory || {
         id: 'srv-' + cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '-'),
         name: cleanCode.includes('-') ? `Squad ${cleanCode}` : cleanCode,
