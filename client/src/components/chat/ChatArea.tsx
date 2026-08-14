@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Hash, Search, Bell, BellOff, Pin, Users, Plus, Smile, 
   FileImage, Send, Sparkles, Zap, UserPlus, Volume2, 
-  Gift, Heart, ArrowRight, MessageSquare, Bot, HelpCircle
+  Gift, Heart, ArrowRight, MessageSquare, Bot, HelpCircle,
+  FileUp, Download, Paperclip, FileText, Image as ImageIcon, Film, Music, Archive, Code, X
 } from 'lucide-react';
 import { useServerStore } from '../../store/useServerStore';
-import { useMessageStore } from '../../store/useMessageStore';
+import { useMessageStore, type FileAttachment } from '../../store/useMessageStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNitroStore } from '../../store/useNitroStore';
 import { useSocket } from '../../hooks/useSocket';
@@ -14,6 +15,7 @@ import { MemberList } from './MemberList';
 import { InviteModal } from '../modals/InviteModal';
 import { NitroModal } from '../modals/NitroModal';
 import { AiAssistantModal } from '../modals/AiAssistantModal';
+import { SendFileModal } from '../modals/SendFileModal';
 import NitroBadge from '../ui/NitroBadge';
 import clsx from 'clsx';
 
@@ -33,7 +35,15 @@ export const ChatArea: React.FC = () => {
   const [isNitroModalOpen, setIsNitroModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [isSendFileModalOpen, setIsSendFileModalOpen] = useState(false);
+  
+  // File upload state in chat input
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingFilePreview, setPendingFilePreview] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const activeServer = servers.find(s => s.id === activeServerId) || servers[0];
@@ -51,19 +61,91 @@ export const ChatArea: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const processPendingFile = (file: File) => {
+    setPendingFile(file);
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => setPendingFilePreview(e.target?.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      setPendingFilePreview(null);
+    }
+  };
+
+  const handleChatFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      processPendingFile(e.target.files[0]);
+    }
+  };
+
+  const handleDragChat = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDropChat = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processPendingFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const getFileIcon = (fileName: string, fileType: string) => {
+    if (fileType.startsWith('image/')) return <ImageIcon className="text-cyan-400" size={20} />;
+    if (fileType.startsWith('video/')) return <Film className="text-pink-400" size={20} />;
+    if (fileType.startsWith('audio/')) return <Music className="text-emerald-400" size={20} />;
+    if (fileType.includes('zip') || fileType.includes('tar') || fileType.includes('rar')) return <Archive className="text-yellow-400" size={20} />;
+    if (fileName.endsWith('.js') || fileName.endsWith('.ts') || fileName.endsWith('.json') || fileName.endsWith('.html')) return <Code className="text-indigo-400" size={20} />;
+    return <FileText className="text-cyan-400" size={20} />;
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const textToSend = content.trim();
-    if (!textToSend || !activeChannelId) return;
+    if ((!textToSend && !pendingFile) || !activeChannelId) return;
 
     try {
+      let attachment: FileAttachment | undefined = undefined;
+      if (pendingFile) {
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(pendingFile);
+        });
+
+        attachment = {
+          name: pendingFile.name,
+          size: pendingFile.size,
+          type: pendingFile.type || 'application/octet-stream',
+          url: dataUrl || URL.createObjectURL(pendingFile),
+        };
+      }
+
+      const finalContent = textToSend || (attachment ? `Shared a file: ${attachment.name}` : '');
       setContent('');
-      await sendMessage(activeChannelId, textToSend);
+      setPendingFile(null);
+      setPendingFilePreview(null);
+
+      await sendMessage(activeChannelId, finalContent, attachment);
       setIsEmojiPickerOpen(false);
       setIsGifsOpen(false);
       inputRef.current?.focus();
     } catch (err) {
-      console.error('Failed to send message');
+      console.error('Failed to send message', err);
     }
   };
 
@@ -103,7 +185,24 @@ export const ChatArea: React.FC = () => {
   const isAiChannel = activeChannel.id === 'ch-ai-bot' || activeChannel.name.includes('ai') || activeChannel.name.includes('bot');
 
   return (
-    <div className="flex-1 flex h-full bg-[#080B11] min-w-0 overflow-hidden select-none">
+    <div 
+      className="flex-1 flex h-full bg-[#080B11] min-w-0 overflow-hidden select-none relative"
+      onDragEnter={handleDragChat}
+    >
+      {/* Drag Over Overlay */}
+      {dragActive && (
+        <div 
+          onDragOver={handleDragChat}
+          onDragLeave={handleDragChat}
+          onDrop={handleDropChat}
+          className="absolute inset-0 z-40 bg-black/80 backdrop-blur-sm border-2 border-dashed border-cyan-400 m-4 rounded-3xl flex flex-col items-center justify-center animate-fade-in"
+        >
+          <FileUp size={48} className="text-cyan-400 animate-bounce mb-3" />
+          <div className="text-lg font-black text-white">Drop File to Send in #{activeChannel.name}</div>
+          <p className="text-xs text-gray-400 mt-1">Images, Videos, PDFs, ZIPs, Docs & Code</p>
+        </div>
+      )}
+
       {/* ──────── CENTER CHAT COLUMN ──────── */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-[#080B11]">
         {/* Top Header Bar - compact on mobile like Discord */}
@@ -159,16 +258,28 @@ export const ChatArea: React.FC = () => {
               <Users size={16} />
             </button>
 
-            {/* Search Box */}
-            <div className="relative hidden md:block ml-1">
-              <input 
-                type="text" 
-                placeholder="Search..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-[#121624] text-xs text-white rounded-xl pl-3 pr-8 py-1.5 focus:outline-none focus:ring-1 focus:ring-cyan-400 w-36 focus:w-48 transition-all border border-white/5 placeholder-gray-500"
-              />
-              <Search size={14} className="absolute right-2.5 top-2 text-gray-400" />
+            {/* Search & Send File Box */}
+            <div className="flex items-center space-x-1.5 ml-1">
+              <div className="relative hidden md:block">
+                <input 
+                  type="text" 
+                  placeholder="Search messages..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-[#121624] text-xs text-white rounded-xl pl-3 pr-8 py-1.5 focus:outline-none focus:ring-1 focus:ring-cyan-400 w-36 focus:w-44 transition-all border border-white/5 placeholder-gray-500"
+                />
+                <Search size={14} className="absolute right-2.5 top-2 text-gray-400" />
+              </div>
+
+              {/* Header Send File Button */}
+              <button
+                onClick={() => setIsSendFileModalOpen(true)}
+                className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 text-cyan-300 border border-cyan-400/30 text-xs font-bold transition-all shadow-md shadow-cyan-500/10 cursor-pointer active:scale-95"
+                title="Send File to User or Channel"
+              >
+                <FileUp size={14} className="text-cyan-400" />
+                <span className="hidden sm:inline">Send File</span>
+              </button>
             </div>
           </div>
         </div>
@@ -339,6 +450,52 @@ export const ChatArea: React.FC = () => {
                             {msg.content}
                           </div>
                         )}
+
+                        {/* File Attachment Card / Image */}
+                        {msg.file && (
+                          <div className="mt-2.5 max-w-sm">
+                            {msg.file.type.startsWith('image/') ? (
+                              <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/40 shadow-xl group/img relative max-h-72">
+                                <img 
+                                  src={msg.file.url} 
+                                  alt={msg.file.name} 
+                                  className="max-h-72 w-full object-cover rounded-2xl cursor-pointer hover:scale-[1.01] transition-transform" 
+                                  onClick={() => window.open(msg.file?.url, '_blank')}
+                                />
+                                <a 
+                                  href={msg.file.url} 
+                                  download={msg.file.name}
+                                  className="absolute bottom-2 right-2 px-2.5 py-1 rounded-xl bg-black/80 hover:bg-cyan-500 text-white hover:text-black font-bold text-xs flex items-center space-x-1 backdrop-blur-md border border-white/20 transition-all shadow-lg"
+                                >
+                                  <Download size={13} />
+                                  <span>Download</span>
+                                </a>
+                              </div>
+                            ) : (
+                              <div className="p-3 bg-[#0D1220] border border-cyan-500/30 rounded-2xl flex items-center justify-between space-x-3 shadow-lg shadow-cyan-500/5">
+                                <div className="flex items-center space-x-3 truncate">
+                                  <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center shrink-0">
+                                    {getFileIcon(msg.file.name, msg.file.type)}
+                                  </div>
+                                  <div className="truncate">
+                                    <div className="text-xs font-black text-white truncate">{msg.file.name}</div>
+                                    <div className="text-[10px] text-cyan-400 font-mono font-bold">
+                                      {formatFileSize(msg.file.size)} • {msg.file.type || 'File'}
+                                    </div>
+                                  </div>
+                                </div>
+                                <a
+                                  href={msg.file.url}
+                                  download={msg.file.name}
+                                  className="p-2 rounded-xl bg-cyan-400/20 hover:bg-cyan-400 text-cyan-300 hover:text-black font-bold text-xs flex items-center justify-center transition-all cursor-pointer shrink-0"
+                                  title="Download File"
+                                >
+                                  <Download size={15} />
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -384,13 +541,47 @@ export const ChatArea: React.FC = () => {
             </div>
           )}
 
+          {/* Pending File Preview Banner before sending */}
+          {pendingFile && (
+            <div className="mb-2 p-2.5 bg-[#0e1322] border border-cyan-400/40 rounded-2xl flex items-center justify-between animate-scale-up">
+              <div className="flex items-center space-x-2.5 truncate">
+                <div className="w-8 h-8 rounded-xl bg-cyan-500/20 flex items-center justify-center shrink-0">
+                  {getFileIcon(pendingFile.name, pendingFile.type)}
+                </div>
+                <div className="truncate">
+                  <div className="text-xs font-bold text-white truncate">{pendingFile.name}</div>
+                  <div className="text-[10px] text-cyan-400 font-mono">{formatFileSize(pendingFile.size)}</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingFile(null);
+                  setPendingFilePreview(null);
+                }}
+                className="p-1 rounded-lg bg-white/5 hover:bg-red-500/20 text-gray-400 hover:text-red-300 transition-all cursor-pointer"
+                title="Remove file"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="bg-[#0F1422] border border-[#1A2234] focus-within:border-cyan-400/70 focus-within:ring-2 focus-within:ring-cyan-400/20 rounded-2xl flex items-center px-4 py-3 shadow-xl transition-all">
+            {/* Hidden native file input */}
+            <input 
+              ref={fileInputRef}
+              type="file"
+              onChange={handleChatFileSelected}
+              className="hidden"
+            />
+
             {/* Attachment Button */}
             <button 
               type="button" 
-              onClick={() => handleEmojiSelect(' 📎 ')} 
+              onClick={() => fileInputRef.current?.click()} 
               className="text-gray-400 hover:text-cyan-400 transition-colors p-1 mr-2 shrink-0 rounded-xl hover:bg-white/5 cursor-pointer"
-              title="Add Attachment"
+              title="Add File Attachment"
             >
               <Plus size={18} />
             </button>
@@ -438,10 +629,10 @@ export const ChatArea: React.FC = () => {
               {/* Send Button */}
               <button 
                 type="submit" 
-                disabled={!content.trim()}
+                disabled={!content.trim() && !pendingFile}
                 className={clsx(
                   "px-3 py-1.5 rounded-xl font-bold text-xs flex items-center space-x-1 transition-all cursor-pointer",
-                  content.trim() 
+                  (content.trim() || pendingFile) 
                     ? "bg-gradient-to-r from-cyan-400 to-blue-500 text-black hover:scale-105 shadow-md shadow-cyan-400/20" 
                     : "text-gray-600 cursor-not-allowed"
                 )}
@@ -455,7 +646,7 @@ export const ChatArea: React.FC = () => {
         </div>
       </div>
 
-      {/* ──────── RIGHT MEMBER LIST DRAWER (CORRECTLY POSITIONED ON RIGHT SIDE) ──────── */}
+      {/* ──────── RIGHT MEMBER LIST DRAWER ──────── */}
       {isMemberListOpen && (
         <div className="hidden lg:block h-full shrink-0">
           <MemberList serverId={activeServer.id} />
@@ -480,6 +671,12 @@ export const ChatArea: React.FC = () => {
         onClose={() => setIsAiModalOpen(false)}
         onOpenNitro={() => setIsNitroModalOpen(true)}
         onOpenInvite={() => setIsInviteModalOpen(true)}
+      />
+
+      <SendFileModal
+        isOpen={isSendFileModalOpen}
+        onClose={() => setIsSendFileModalOpen(false)}
+        defaultChannelId={activeChannel?.id}
       />
     </div>
   );

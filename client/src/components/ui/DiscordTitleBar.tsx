@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Search, Minus, Square, X, Bell, Shield, Sparkles, Download, Menu, Users } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Minus, Square, X, Bell, Shield, Sparkles, Download, Menu, Users, FileUp, Paperclip } from 'lucide-react';
 import { useNitroStore } from '../../store/useNitroStore';
 import { NitroModal } from '../modals/NitroModal';
+import { SendFileModal } from '../modals/SendFileModal';
 import { usePwaInstall } from '../../hooks/usePwaInstall';
 
 interface DiscordTitleBarProps {
@@ -17,7 +18,20 @@ export const DiscordTitleBar: React.FC<DiscordTitleBarProps> = ({
 }) => {
   const { isNitro } = useNitroStore();
   const [isNitroOpen, setIsNitroOpen] = useState(false);
+  const [isSendFileOpen, setIsSendFileOpen] = useState(false);
   const { isInstallable, isInstalled, promptInstall } = usePwaInstall();
+
+  // Keyboard shortcut Ctrl+K to open Search / Send File
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsSendFileOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <>
@@ -47,16 +61,36 @@ export const DiscordTitleBar: React.FC<DiscordTitleBarProps> = ({
           </span>
         </div>
 
-        {/* Center: Search Bar / Quick Switcher (Hidden on small mobile) */}
-        <div className="hidden sm:flex items-center max-w-xs md:max-w-sm w-full mx-2 md:mx-4">
-          <div className="bg-[#0D1018] hover:bg-[#131824] border border-white/5 hover:border-cyan-400/40 rounded-md px-2.5 py-0.5 flex items-center justify-between w-full text-[11px] text-gray-400 cursor-pointer transition-all shadow-inner">
-            <div className="flex items-center space-x-1.5 truncate">
-              <Search size={12} className="text-cyan-400/80 shrink-0" />
-              <span className="truncate">Find or start a conversation</span>
+        {/* Center: Search Bar / Quick Switcher & Send File */}
+        <div className="hidden sm:flex items-center max-w-sm md:max-w-md w-full mx-2 md:mx-4">
+          <div 
+            onClick={() => setIsSendFileOpen(true)}
+            className="bg-[#0D1018] hover:bg-[#131824] border border-white/5 hover:border-cyan-400/50 rounded-lg px-2.5 py-0.5 flex items-center justify-between w-full text-[11px] text-gray-400 cursor-pointer transition-all shadow-inner group"
+          >
+            <div className="flex items-center space-x-2 truncate">
+              <Search size={12} className="text-cyan-400 shrink-0 group-hover:scale-110 transition-transform" />
+              <span className="truncate group-hover:text-gray-200">Find user or send file...</span>
             </div>
-            <kbd className="hidden md:inline-block bg-white/5 text-[9px] font-mono px-1 py-0.2 rounded text-gray-400 border border-white/10 shrink-0">
-              Ctrl+K
-            </kbd>
+
+            <div className="flex items-center space-x-1.5">
+              {/* Send File badge button inside search bar */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsSendFileOpen(true);
+                }}
+                className="flex items-center space-x-1 bg-cyan-500/10 hover:bg-cyan-500/25 text-cyan-400 border border-cyan-500/30 px-1.5 py-0.2 rounded text-[10px] font-extrabold transition-all cursor-pointer"
+                title="Send File to any user"
+              >
+                <FileUp size={10} />
+                <span>Send File</span>
+              </button>
+
+              <kbd className="hidden md:inline-block bg-white/5 text-[9px] font-mono px-1 py-0.2 rounded text-gray-400 border border-white/10 shrink-0">
+                Ctrl+K
+              </kbd>
+            </div>
           </div>
         </div>
 
@@ -119,6 +153,7 @@ export const DiscordTitleBar: React.FC<DiscordTitleBarProps> = ({
       </header>
 
       <NitroModal isOpen={isNitroOpen} onClose={() => setIsNitroOpen(false)} />
+      <SendFileModal isOpen={isSendFileOpen} onClose={() => setIsSendFileOpen(false)} />
     </>
   );
 };

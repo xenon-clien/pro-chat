@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Users, UserPlus, MessageSquare, Phone, Video, Search, Sparkles, 
-  Zap, Shield, Volume2, KeyRound, Check, Copy, Bot, ArrowRight 
+  Zap, Shield, Volume2, KeyRound, Check, Copy, Bot, ArrowRight, FileUp 
 } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNitroStore } from '../../store/useNitroStore';
@@ -9,6 +9,7 @@ import { useServerStore } from '../../store/useServerStore';
 import NitroBadge from '../ui/NitroBadge';
 import { NitroModal } from '../modals/NitroModal';
 import { AiAssistantModal } from '../modals/AiAssistantModal';
+import { SendFileModal } from '../modals/SendFileModal';
 import DiscordNotificationBadge from '../ui/DiscordNotificationBadge';
 import clsx from 'clsx';
 
@@ -84,6 +85,8 @@ export const FriendsView: React.FC = () => {
   const [copiedLink, setCopiedLink] = useState(false);
   const [isNitroModalOpen, setIsNitroModalOpen] = useState(false);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [isSendFileOpen, setIsSendFileOpen] = useState(false);
+  const [selectedFriendForFile, setSelectedFriendForFile] = useState<string | null>(null);
 
   const { user } = useAuthStore();
   const { isNitro, nitroTier } = useNitroStore();
@@ -275,16 +278,27 @@ export const FriendsView: React.FC = () => {
           ) : (
             /* ──────── REGULAR FRIENDS LIST ──────── */
             <>
-              {/* Search bar */}
-              <div className="relative mb-6">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search friends..."
-                  className="w-full bg-[#121418] border border-white/5 focus:border-cyan-400 rounded-xl px-4 py-2.5 pl-10 text-xs text-white outline-none transition-all placeholder-gray-500"
-                />
-                <Search size={16} className="absolute left-3.5 top-3 text-gray-400" />
+              {/* Search bar & Send File */}
+              <div className="flex items-center space-x-2 mb-6">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search friends by username..."
+                    className="w-full bg-[#121418] border border-white/5 focus:border-cyan-400 rounded-xl px-4 py-2.5 pl-10 text-xs text-white outline-none transition-all placeholder-gray-500"
+                  />
+                  <Search size={16} className="absolute left-3.5 top-3 text-gray-400" />
+                </div>
+
+                <button
+                  onClick={() => setIsSendFileOpen(true)}
+                  className="flex items-center space-x-1.5 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 text-cyan-300 border border-cyan-400/30 text-xs font-bold transition-all shadow-md shadow-cyan-500/10 cursor-pointer active:scale-95 shrink-0"
+                  title="Send File to Friend or Channel"
+                >
+                  <FileUp size={15} className="text-cyan-400" />
+                  <span className="hidden sm:inline">Send File</span>
+                </button>
               </div>
 
               <div className="text-[11px] font-black uppercase tracking-wider text-cyan-400 mb-3 px-1">
@@ -348,6 +362,16 @@ export const FriendsView: React.FC = () => {
                       )}
 
                       <div className="flex items-center space-x-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => {
+                            setSelectedFriendForFile(friend.name);
+                            setIsSendFileOpen(true);
+                          }}
+                          className="w-9 h-9 rounded-xl bg-[#1C1E26] hover:bg-cyan-400 hover:text-black text-gray-300 flex items-center justify-center transition-all cursor-pointer shadow"
+                          title="Send File to User"
+                        >
+                          <FileUp size={16} />
+                        </button>
                         <button
                           className="w-9 h-9 rounded-xl bg-[#1C1E26] hover:bg-cyan-400 hover:text-black text-gray-300 flex items-center justify-center transition-all cursor-pointer shadow"
                           title="Direct Message"
@@ -424,6 +448,14 @@ export const FriendsView: React.FC = () => {
 
       <NitroModal isOpen={isNitroModalOpen} onClose={() => setIsNitroModalOpen(false)} />
       <AiAssistantModal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} />
+      <SendFileModal 
+        isOpen={isSendFileOpen} 
+        onClose={() => {
+          setIsSendFileOpen(false);
+          setSelectedFriendForFile(null);
+        }} 
+        defaultRecipientName={selectedFriendForFile || undefined} 
+      />
     </div>
   );
 };

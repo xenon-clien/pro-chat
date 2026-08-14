@@ -12,6 +12,13 @@ export function registerServerCodeGetter(fn: () => string | null) {
   _getActiveServerInviteCode = fn;
 }
 
+export interface FileAttachment {
+  name: string;
+  size: number;
+  type: string;
+  url: string;
+}
+
 export interface Message {
   id: string;
   content: string;
@@ -23,6 +30,7 @@ export interface Message {
     isBot?: boolean;
   };
   channelId: string;
+  file?: FileAttachment;
 }
 
 interface MessageState {
@@ -32,7 +40,7 @@ interface MessageState {
   activeChannelId: string | null;
   fetchMessages: (channelId: string) => Promise<void>;
   addMessage: (message: Message) => void;
-  sendMessage: (channelId: string, content: string) => Promise<void>;
+  sendMessage: (channelId: string, content: string, fileAttachment?: FileAttachment) => Promise<void>;
   clearMessages: () => void;
 }
 
@@ -168,7 +176,7 @@ export const useMessageStore = create<MessageState>((set, get) => {
       }
     },
 
-    sendMessage: async (channelId: string, content: string) => {
+    sendMessage: async (channelId: string, content: string, fileAttachment?: FileAttachment) => {
       const authUser = useAuthStore.getState().user;
       const currentUser = authUser || JSON.parse(sessionStorage.getItem('user') || localStorage.getItem('user') || '{}');
       const topic = getSharedTopic(channelId);
@@ -185,6 +193,7 @@ export const useMessageStore = create<MessageState>((set, get) => {
             `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser.name || 'Pro'}`,
         },
         channelId,
+        ...(fileAttachment ? { file: fileAttachment } : {}),
       };
 
       // Add locally (optimistic)
