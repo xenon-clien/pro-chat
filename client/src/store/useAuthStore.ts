@@ -119,17 +119,13 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
     logout: () => {
       if (typeof window !== 'undefined') {
-        sessionStorage.removeItem('token');
-        sessionStorage.removeItem('user');
+        sessionStorage.clear();
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         localStorage.removeItem('nitro_status');
         localStorage.removeItem('prochat_user_servers');
         Object.keys(localStorage).forEach((key) => {
-          if (key.startsWith('prochat_msgs_')) localStorage.removeItem(key);
-        });
-        Object.keys(sessionStorage).forEach((key) => {
-          if (key.startsWith('prochat_msgs_')) sessionStorage.removeItem(key);
+          if (key.startsWith('prochat_') || key.startsWith('presence_')) localStorage.removeItem(key);
         });
       }
       set({ user: null, token: null, isAuthenticated: false });

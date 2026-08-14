@@ -9,24 +9,32 @@ import { create } from 'zustand';
 import clsx from 'clsx';
 
 // ── Presence store ──────────────────────────────────────────────
-interface PresenceMember {
+export interface PresenceMember {
   id: string;
   name: string;
   avatarUrl?: string;
   isBot?: boolean;
   lastSeen: number; // timestamp ms
+  type?: 'HEARTBEAT' | 'LEAVE';
 }
 
 interface PresenceState {
   members: Record<string, PresenceMember>;
   upsertMember: (m: PresenceMember) => void;
   removeStaleMember: (id: string) => void;
+  clearMembers: () => void;
 }
 
 export const usePresenceStore = create<PresenceState>((set, get) => ({
   members: {},
   upsertMember: (m) => {
     if (!m || !m.id) return;
+    if (m.type === 'LEAVE') {
+      const next = { ...get().members };
+      delete next[m.id];
+      set({ members: next });
+      return;
+    }
     const cur = get().members;
     set({ members: { ...cur, [m.id]: { ...cur[m.id], ...m, lastSeen: Date.now() } } });
   },
@@ -35,6 +43,9 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
     delete next[id];
     set({ members: next });
   },
+  clearMembers: () => {
+    set({ members: {} });
+  },
 }));
 
 interface MemberListProps {
@@ -42,20 +53,25 @@ interface MemberListProps {
 }
 
 const HEARTBEAT_INTERVAL = 2500; // heartbeat every 2.5s
-const MEMBER_TIMEOUT = 14000;     // remove if silent for 14s
+const MEMBER_TIMEOUT = 6000;      // prune stale members after 6s of inactivity
 
 export const MemberList: React.FC<MemberListProps> = () => {
   const { user: currentUser } = useAuthStore();
   const { peers } = useVoiceStore();
   const { servers, activeServerId } = useServerStore();
-  const { members, upsertMember, removeStaleMember } = usePresenceStore();
+  const { members, upsertMember, removeStaleMember, clearMembers } = usePresenceStore();
 
   const activeServer = servers.find(s => s.id === activeServerId) || servers[0];
   const inviteCode = (activeServer?.inviteCode || 'PRO-HD').toUpperCase().replace(/[^A-Z0-9]/g, '-');
-  const presenceTopic = `prochat/v2/presence/${inviteCode}`;
+  const presenceTopic = `prochat/v3/presence/${inviteCode}`;
 
   const currentTopicRef = useRef<string>(presenceTopic);
   currentTopicRef.current = presenceTopic;
+
+  // Clear stale cached members whenever the active server or user changes
+  useEffect(() => {
+    clearMembers();
+  }, [activeServerId, currentUser?.id, clearMembers]);
 
   // ── Publish Presence & Listen ──
   useEffect(() => {
@@ -66,6 +82,7 @@ export const MemberList: React.FC<MemberListProps> = () => {
       name: currentUser.name,
       avatarUrl: currentUser.avatarUrl,
       lastSeen: Date.now(),
+      type: 'HEARTBEAT',
     };
 
     // Broadcast immediately on mount / topic switch
@@ -73,43 +90,58 @@ export const MemberList: React.FC<MemberListProps> = () => {
 
     // Subscribe to presence
     const unsub = cloudRelay.subscribe(presenceTopic, (_, data: PresenceMember) => {
-      if (data?.id && data.id !== currentUser.id) {
+      if (data?.id) {
+        if (data.id === currentUser.id) return;
+        if (data.type === 'LEAVE') {
+          removeStaleMember(data.id);
+          return;
+        }
         upsertMember(data);
-        // Reply with our presence so the peer sees us immediately
-        cloudRelay.publish(presenceTopic, {
-          id: currentUser.id,
-          name: currentUser.name,
-          avatarUrl: currentUser.avatarUrl,
-          lastSeen: Date.now(),
-        });
       }
     });
 
     // Heartbeat timer
     const heartbeat = setInterval(() => {
-      cloudRelay.publish(presenceTopic, { ...me, lastSeen: Date.now() });
+      cloudRelay.publish(presenceTopic, {
+        id: currentUser.id,
+        name: currentUser.name,
+        avatarUrl: currentUser.avatarUrl,
+        lastSeen: Date.now(),
+        type: 'HEARTBEAT',
+      });
     }, HEARTBEAT_INTERVAL);
 
-    // Prune timer
+    // Fast prune timer - removes offline / logged-out users in real time
     const prune = setInterval(() => {
       const now = Date.now();
-      Object.values(usePresenceStore.getState().members).forEach(m => {
+      const currentList = usePresenceStore.getState().members;
+      Object.values(currentList).forEach(m => {
         if (now - m.lastSeen > MEMBER_TIMEOUT) {
           removeStaleMember(m.id);
         }
       });
-    }, 4000);
+    }, 2000);
 
     return () => {
+      // Publish leave notification on unmount so peers remove us instantly
+      cloudRelay.publish(presenceTopic, {
+        id: currentUser.id,
+        name: currentUser.name,
+        type: 'LEAVE',
+        lastSeen: Date.now(),
+      });
       unsub();
       clearInterval(heartbeat);
       clearInterval(prune);
     };
   }, [presenceTopic, currentUser?.id, currentUser?.name, currentUser?.avatarUrl, upsertMember, removeStaleMember]);
 
-  // ── Build final member list ──
-  const voicePeersList = Object.values(peers);
-  const onlineOthers = Object.values(members);
+  // ── Build clean, live member list ──
+  const voicePeersList = Object.values(peers).filter(p => !p.isYou);
+  const now = Date.now();
+  const onlineOthers = Object.values(members).filter(
+    m => m.id !== currentUser?.id && (now - m.lastSeen <= MEMBER_TIMEOUT)
+  );
 
   // Me as first entry
   const me = {
