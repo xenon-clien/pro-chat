@@ -188,35 +188,41 @@ export const CreateServerModal: React.FC<CreateServerModalProps> = ({
                 </div>
               )}
 
-              {/* Search Bar */}
-              <div className="relative">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search servers by name or code (e.g. Gaming, HQ, Anime)..."
-                  className="w-full bg-[#07090E] text-white px-4 py-3 pl-10 rounded-2xl border border-gray-800 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 outline-none text-xs font-semibold transition-all"
-                  autoFocus
-                />
-                <Search size={16} className="absolute left-3.5 top-3.5 text-gray-500" />
-              </div>
-
-              {/* Direct Join Action if User typed a custom code/name */}
-              {searchQuery.trim() && !filteredDirectory.some(s => s.name.toLowerCase() === query || s.inviteCode?.toLowerCase() === query) && (
-                <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-400/30 flex items-center justify-between animate-fade-in">
-                  <div>
-                    <div className="text-xs font-bold text-white">Join by name: <span className="text-cyan-300 font-mono">"{searchQuery.trim()}"</span></div>
-                    <div className="text-[10px] text-gray-400">Connect to this server guild directly</div>
-                  </div>
-                  <button
-                    onClick={() => handleJoinServer(searchQuery.trim())}
-                    className="px-4 py-2 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-black font-black text-xs shadow-md cursor-pointer flex items-center space-x-1"
-                  >
-                    <span>Join Now</span>
-                    <ArrowRight size={13} />
-                  </button>
+              {/* Search / Invite Code Input with 1-Click Join */}
+              <div className="flex items-center space-x-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (searchQuery.trim()) handleJoinServer(searchQuery.trim());
+                      }
+                    }}
+                    placeholder="Enter invite code or server name (e.g. MAIH-3113)..."
+                    className="w-full bg-[#07090E] text-white px-4 py-3 pl-10 rounded-2xl border border-gray-800 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 outline-none text-xs font-semibold transition-all"
+                    autoFocus
+                  />
+                  <Search size={16} className="absolute left-3.5 top-3.5 text-gray-500" />
                 </div>
-              )}
+
+                <button
+                  type="button"
+                  onClick={() => searchQuery.trim() && handleJoinServer(searchQuery.trim())}
+                  disabled={!searchQuery.trim() || isLoading}
+                  className={clsx(
+                    "px-4 py-3 rounded-2xl font-black text-xs transition-all shadow-md flex items-center space-x-1.5 shrink-0 cursor-pointer",
+                    searchQuery.trim()
+                      ? "bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-black active:scale-95 shadow-cyan-500/20"
+                      : "bg-[#181D2A] text-gray-500 cursor-not-allowed opacity-60"
+                  )}
+                >
+                  <span>{isLoading ? 'Joining...' : 'Join'}</span>
+                  <ArrowRight size={13} />
+                </button>
+              </div>
 
               {/* Server List Results */}
               <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">

@@ -20,24 +20,29 @@ export const MainLayout: React.FC = () => {
   const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
-    fetchServers();
+    const initApp = async () => {
+      await fetchServers();
 
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const inviteCode = params.get('join') || params.get('invite');
-      const pathMatch = window.location.pathname.match(/\/invite\/([A-Za-z0-9_-]+)/);
-      const targetCode = inviteCode || (pathMatch ? pathMatch[1] : null);
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const inviteCode = params.get('join') || params.get('invite');
+        const pathMatch = window.location.pathname.match(/\/invite\/([A-Za-z0-9_-]+)/);
+        const targetCode = inviteCode || (pathMatch ? pathMatch[1] : null);
 
-      if (targetCode) {
-        joinServerByCode(targetCode).then((joined) => {
-          setJoinedToast(`Joined ${joined.name || targetCode} successfully! 🎉`);
-          setTimeout(() => setJoinedToast(null), 4000);
-          window.history.replaceState({}, '', '/');
-        }).catch(err => {
-          console.warn('Invite auto-join failed:', err);
-        });
+        if (targetCode) {
+          try {
+            const joined = await joinServerByCode(targetCode);
+            setJoinedToast(`Joined "${joined.name || targetCode}" successfully! 🎉`);
+            setTimeout(() => setJoinedToast(null), 4000);
+            window.history.replaceState({}, '', window.location.pathname);
+          } catch (err) {
+            console.warn('Invite auto-join failed:', err);
+          }
+        }
       }
-    }
+    };
+
+    initApp();
   }, [fetchServers, joinServerByCode]);
 
   // Close mobile drawers when switching channels
